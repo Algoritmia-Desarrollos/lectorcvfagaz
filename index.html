@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Portal de Postulación</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <div id="aviso-container" class="aviso-container">
+    </div>
+
+  <div id="upload-section" class="upload-container">
+    <div id="form-view">
+      <h2 id="upload-title">Postulate a esta búsqueda</h2>
+      <form id="cv-form">
+        <label for="fileInput" class="custom-file-upload">
+          <span id="file-label-text">Seleccionar archivo PDF</span>
+        </label>
+        <input type="file" id="fileInput" accept="application/pdf" hidden>
+        <button type="submit" id="submit-btn" disabled>Enviar Postulación</button>
+      </form>
+    </div>
+    <div id="success-view" class="hidden">
+       <img src="https://img.icons8.com/color/96/000000/checked-checkbox.png" alt="Icono de éxito"/>
+      <h2>¡Gracias por postularte!</h2>
+      <p>Hemos recibido tu CV y lo tendremos en cuenta.</p>
+    </div>
+  </div>
+
+  <script src="index.js"></script>
+</body>
+</html>

@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Panel de Candidatos</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="resumenes-container">
+    <div class="dashboard-header">
+      <h1>Panel de Candidatos</h1>
+      <a href="index.html" class="action-btn">Ir a Postulación</a>
+    </div>
+    
+    <div class="cv-list-header">
+      <div>NOMBRE</div>
+      <div>CALIFICACIÓN</div>
+      <div>RESUMEN</div>
+      <div>NOTAS</div>
+      <div>ACCIONES</div>
+    </div>
+
+    <div id="resumenes-list">
+      </div>
+
+  </div>
+
+  <div id="modal-container" class="modal-container hidden">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="modal-title"></h2>
+        <button id="modal-close" class="modal-close-btn">&times;</button>
+      </div>
+      <div id="modal-body" class="modal-body"></div>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
+  <script src="resumenes.js"></script>
+</body>
+</html>
