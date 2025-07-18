@@ -64,37 +64,37 @@ async function cargarYProcesarCandidatos(db, avisoId) {
         return;
     }
 
-    const nuevosCandidatos = candidatos.filter(cv => cv.calificacion === null);
-    processingStatus.textContent = nuevosCandidatos.length > 0 ? `Analizando ${nuevosCandidatos.length} nuevos CVs...` : "Todos los candidatos están calificados.";
-    
-    let procesadosCount = 0;
-    for (const cv of nuevosCandidatos) {
-        procesadosCount++;
-        const nombreOriginal = cv.nombreArchivo || cv.nombre || "candidato";
-        processingStatus.textContent = `Procesando ${procesadosCount} de ${nuevosCandidatos.length}... (${nombreOriginal})`;
-        try {
-            const textoCV = await extraerTextoOCR(cv.base64);
-            const iaData = await calificarCVConIA(textoCV, avisoActivo);
-            
-            cv.texto = textoCV;
-            cv.nombreCandidato = iaData.nombreCompleto;
-            cv.email = iaData.email;
-            cv.telefono = iaData.telefono;
-            cv.calificacion = iaData.calificacion;
-            cv.resumen = iaData.justificacion;
-            
-            await actualizarCandidatoEnDB(db, cv);
-        } catch (error) {
-            console.error(`Falló el procesamiento para el CV ${cv.id}:`, error);
-            cv.calificacion = 0;
-            cv.resumen = "Error durante el análisis de IA.";
-            await actualizarCandidatoEnDB(db, cv);
-        }
-    }
-
-    if (nuevosCandidatos.length > 0) processingStatus.textContent = "Análisis completado.";
-    filtroContainer.classList.remove('hidden');
     actualizarVistaCandidatos();
+    filtroContainer.classList.remove('hidden');
+
+    const nuevosCandidatos = candidatos.filter(cv => cv.calificacion === null);
+    if (nuevosCandidatos.length > 0) {
+        processingStatus.textContent = `Analizando ${nuevosCandidatos.length} nuevos CVs...`;
+        
+        for (const cv of nuevosCandidatos) {
+            try {
+                const textoCV = await extraerTextoOCR(cv.base64);
+                const iaData = await calificarCVConIA(textoCV, avisoActivo);
+                
+                cv.texto = textoCV;
+                cv.nombreCandidato = iaData.nombreCompleto;
+                cv.email = iaData.email;
+                cv.telefono = iaData.telefono;
+                cv.calificacion = iaData.calificacion;
+                cv.resumen = iaData.justificacion;
+                
+            } catch (error) {
+                console.error(`Falló el procesamiento para el CV ${cv.id}:`, error);
+                cv.calificacion = "Error"; // Marcar como error
+                cv.resumen = `El análisis falló: ${error.message}`;
+            }
+            await actualizarCandidatoEnDB(db, cv);
+            actualizarVistaCandidatos();
+        }
+        processingStatus.textContent = "Análisis completado.";
+    } else {
+        processingStatus.textContent = "Todos los candidatos están calificados.";
+    }
 }
 
 // --- FUNCIÓN CENTRAL PARA FILTRAR, ORDENAR Y RENDERIZAR ---
@@ -104,12 +104,16 @@ function actualizarVistaCandidatos() {
         const nombre = (cv.nombreCandidato || cv.nombreArchivo || '').toLowerCase();
         return nombre.includes(filtro);
     });
-    candidatosFiltrados.sort((a, b) => (b.calificacion || 0) - (a.calificacion || 0));
+    candidatosFiltrados.sort((a, b) => {
+        const scoreA = (typeof a.calificacion === 'number' ? a.calificacion : 0);
+        const scoreB = (typeof b.calificacion === 'number' ? b.calificacion : 0);
+        return scoreB - scoreA;
+    });
     resumenesList.innerHTML = '';
     if (candidatosFiltrados.length === 0) {
         resumenesList.innerHTML = '<tr><td colspan="5" style="text-align: center;">No se encontraron candidatos.</td></tr>';
     } else {
-        candidatosFiltrados.forEach(cv => renderizarTarjeta(cv));
+        candidatosFiltrados.forEach(cv => renderizarFila(cv));
     }
 }
 
@@ -137,38 +141,78 @@ resumenesList.addEventListener('click', (e) => {
     }
 });
 
-// --- LÓGICA DE IA OPTIMIZADA ---
-async function calificarCVConIA(textoCV, aviso) {
-    if (!textoCV || !aviso) {
-        return { calificacion: 0, justificacion: "Faltan datos para la comparación." };
-    }
-    
-    // NOVEDAD: Se trunca el texto del CV para enviar menos tokens
-    const textoCVOptimizado = textoCV.substring(0, 4000);
+// --- FUNCIÓN FETCH CON TIMEOUT ---
+async function fetchWithTimeout(resource, options = {}, timeout = 60000) { // Timeout de 60 segundos
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), timeout);
 
+    try {
+        const response = await fetch(resource, {
+            ...options,
+            signal: controller.signal  
+        });
+        clearTimeout(id);
+        return response;
+    } catch (error) {
+        clearTimeout(id);
+        if (error.name === 'AbortError') {
+            throw new Error('La solicitud a la IA tardó demasiado y fue cancelada (Timeout).');
+        }
+        throw error;
+    }
+}
+
+// --- LÓGICA DE IA CON PROMPT MEJORADO ---
+async function calificarCVConIA(textoCV, aviso) {
+    const textoCVOptimizado = textoCV.substring(0, 4000);
     const contextoAviso = `
         Título del Puesto: ${aviso.titulo}
-        Condiciones Necesarias (Excluyentes): ${aviso.condicionesNecesarias.join(', ')}
-        Condiciones Deseables (Suman puntos): ${aviso.condicionesDeseables.join(', ')}
-    `;
-    const prompt = `
-        Analiza el CV y compáralo con el aviso. Devuelve un JSON con 5 claves: "nombreCompleto", "email", "telefono", "calificacion" (número de 1 a 100) y "justificacion".
-        REGLAS DE CALIFICACIÓN: Si no cumple TODAS las condiciones necesarias, la calificación no puede superar 40. Si las cumple, parte de 70 y suma puntos por las deseables.
-        AVISO: """${contextoAviso}"""
-        CV: """${textoCVOptimizado}"""
+        Condiciones Necesarias (Excluyentes y Críticas): ${aviso.condicionesNecesarias.join(', ')}
+        Condiciones Deseables (Suman puntos extra): ${aviso.condicionesDeseables.join(', ')}
     `;
     
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    // NOVEDAD: Prompt mucho más específico
+    const prompt = `
+        Eres un reclutador senior de RRHH con más de 15 años de experiencia, especializado en perfiles técnicos. Tu tarea es analizar un CV en comparación con un aviso de trabajo específico. Debes ser extremadamente estricto, detallista y objetivo.
+
+        **TAREA:**
+        Compara el "TEXTO DEL CV" con el "CONTEXTO DEL AVISO". Devuelve tu análisis únicamente en formato JSON con 5 claves: "nombreCompleto", "email", "telefono", "calificacion" y "justificacion".
+
+        **REGLAS DE ANÁLISIS Y CALIFICACIÓN (MUY IMPORTANTE):**
+        1.  **"nombreCompleto", "email", "telefono"**: Extrae los datos de contacto del candidato del CV. Sé preciso.
+        2.  **"calificacion"**: Asigna una nota numérica de 1 a 100. La distribución de notas debe ser amplia para diferenciar bien a los candidatos.
+            - **Filtro Excluyente:** Si el candidato **NO CUMPLE** con **TODAS Y CADA UNA** de las "Condiciones Necesarias", la nota **NUNCA puede ser superior a 40**.
+            - **Base de Aprobado:** Si el candidato cumple con **todas** las "Condiciones Necesarias", parte de una base de 70 puntos.
+            - **Puntos Extra:** A partir de los 70 puntos, suma puntos por cada "Condición Deseable" que cumpla. La experiencia general relevante (años en puestos similares, tecnologías adyacentes, etc.) también suma puntos. Sé granular, no todos los que cumplen lo deseable merecen la misma nota.
+            - **Regla Anti-Empate:** Si dos perfiles son muy similares, utiliza los años de experiencia o la relevancia de sus roles anteriores como factor de desempate para asignar una calificación ligeramente diferente. Evita asignar la misma nota a muchos candidatos.
+        3.  **"justificacion"**: Redacta un párrafo de análisis profesional y bien justificado. **No des una lista de puntos**. Debe ser un texto cohesionado que explique el porqué de la nota.
+            - Comienza indicando si cumple o no con el filtro de "Condiciones Necesarias".
+            - Detalla qué fortalezas clave tiene el candidato que se alinean con la descripción del puesto.
+            - Menciona qué "Condiciones Deseables" cumple.
+            - Si la nota es baja, explica de forma constructiva las carencias principales o por qué no es un perfil adecuado para este aviso en particular.
+
+        **CONTEXTO DEL AVISO:**
+        """
+        ${contextoAviso}
+        """
+
+        **TEXTO DEL CV:**
+        """
+        ${textoCVOptimizado}
+        """
+    `;
+    
+    const response = await fetchWithTimeout("https://api.openai.com/v1/chat/completions", {
         method: "POST",
         headers: { "Authorization": `Bearer ${OPENAI_API_KEY}`, "Content-Type": "application/json" },
         body: JSON.stringify({
-            // NOVEDAD: Cambio a un modelo más rápido y económico
             model: "gpt-3.5-turbo", 
             response_format: { "type": "json_object" },
             messages: [{ role: "user", content: prompt }],
             temperature: 0.1,
         })
     });
+
     if (!response.ok) throw new Error(`API Error: ${response.status}`);
     const data = await response.json();
     const content = JSON.parse(data.choices[0].message.content);
@@ -181,27 +225,42 @@ async function calificarCVConIA(textoCV, aviso) {
     };
 }
 
-// --- El resto de las funciones (renderizado, modales, DB, OCR) son idénticas ---
-function renderizarTarjeta(cv) {
+// --- RENDERIZADO Y MODALES ---
+function renderizarFila(cv) {
     const nombreCandidato = cv.nombreCandidato || cv.nombreArchivo.replace(/\.pdf$/i, '');
-    const calificacionMostrada = cv.calificacion !== null ? `<strong>${cv.calificacion} / 100</strong>` : '-';
+    let calificacionMostrada;
+    if (cv.calificacion === null) {
+        calificacionMostrada = '<em>Analizando...</em>';
+    } else if (typeof cv.calificacion === 'number') {
+        calificacionMostrada = `<strong>${cv.calificacion} / 100</strong>`;
+    } else {
+        calificacionMostrada = `<strong style="color: #dc3545;">${cv.calificacion}</strong>`;
+    }
+
     const notasClass = cv.notas ? 'has-notes' : '';
     const row = document.createElement('tr');
     row.dataset.id = cv.id;
     row.innerHTML = `
         <td><strong>${nombreCandidato}</strong></td>
         <td>${calificacionMostrada}</td>
-        <td><button class="action-btn" data-action="ver-resumen">Análisis IA</button></td>
+        <td><button class="action-btn" data-action="ver-resumen" ${cv.calificacion === null || cv.calificacion === 'Error' ? 'disabled' : ''}>Análisis IA</button></td>
         <td><button class="action-btn ${notasClass}" data-action="ver-notas">Notas</button></td>
         <td>
             <div class="actions-group">
                 <a href="${cv.base64}" download="${nombreCandidato.replace(/ /g, '_')}.pdf" class="action-btn primary-btn">Ver CV</a>
-                <button class="action-btn" data-action="ver-contacto">Contacto</button>
+                <button class="action-btn" data-action="ver-contacto" ${cv.calificacion === null || cv.calificacion === 'Error' ? 'disabled' : ''}>Contacto</button>
             </div>
         </td>
     `;
-    resumenesList.appendChild(row);
+    
+    const existingRow = resumenesList.querySelector(`tr[data-id='${cv.id}']`);
+    if (existingRow) {
+        existingRow.replaceWith(row);
+    } else {
+        resumenesList.appendChild(row);
+    }
 }
+
 modalCloseBtn.addEventListener('click', cerrarModal);
 modalContainer.addEventListener('click', (e) => {
     if (e.target === modalContainer) {
@@ -221,7 +280,8 @@ function cerrarModal() {
 }
 function abrirModalResumen(cv) {
     modalTitle.textContent = `Análisis de ${cv.nombreCandidato || 'Candidato'}`;
-    modalBody.innerHTML = `<h4>Calificación: ${cv.calificacion}/100</h4><p>${cv.resumen ? cv.resumen.replace(/\n/g, '<br>') : 'No hay análisis disponible.'}</p>`;
+    let bodyContent = `<h4>Calificación: ${typeof cv.calificacion === 'number' ? cv.calificacion + '/100' : cv.calificacion}</h4><p>${cv.resumen ? cv.resumen.replace(/\n/g, '<br>') : 'No hay análisis disponible.'}</p>`;
+    modalBody.innerHTML = bodyContent;
     abrirModal();
 }
 function abrirModalContacto(cv) {
