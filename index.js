@@ -43,12 +43,13 @@ window.addEventListener('DOMContentLoaded', async () => {
     request.onsuccess = () => {
         avisoActivo = request.result;
         if (avisoActivo) {
+            // CORRECCIÓN: Usar snake_case para coincidir con la base de datos
             avisoContainer.innerHTML = `
                 <div class="aviso-header">
                     <h1>${avisoActivo.titulo}</h1>
                     <div class="aviso-meta">
-                        <span><strong>Cierre:</strong> ${new Date(avisoActivo.validoHasta).toLocaleDateString('es-AR')}</span>
-                        <span><strong>Cupo:</strong> ${avisoActivo.maxCV}</span>
+                        <span><strong>Cierre:</strong> ${new Date(avisoActivo.valido_hasta).toLocaleDateString('es-AR')}</span>
+                        <span><strong>Cupo:</strong> ${avisoActivo.max_cv}</span>
                     </div>
                 </div>
                 <p class="descripcion">${avisoActivo.descripcion.replace(/\n/g, '<br>')}</p>

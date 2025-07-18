@@ -50,14 +50,15 @@ window.addEventListener('DOMContentLoaded', async () => {
     const aviso = await getAvisoById(id);
 
     if (aviso) {
+        // CORRECCIÓN: Usar snake_case para coincidir con la base de datos
         avisoTitulo.textContent = aviso.titulo;
         avisoIdSpan.textContent = aviso.id;
-        avisoMaxCv.textContent = aviso.maxCV;
-        avisoValidoHasta.textContent = new Date(aviso.validoHasta).toLocaleDateString('es-AR');
+        avisoMaxCv.textContent = aviso.max_cv;
+        avisoValidoHasta.textContent = new Date(aviso.valido_hasta).toLocaleDateString('es-AR');
         avisoDescripcion.textContent = aviso.descripcion;
 
-        necesariasList.innerHTML = aviso.condicionesNecesarias.map(c => `<li>${c}</li>`).join('') || '<li>No se especificaron condiciones necesarias.</li>';
-        deseablesList.innerHTML = aviso.condicionesDeseables.map(c => `<li>${c}</li>`).join('') || '<li>No se especificaron condiciones deseables.</li>';
+        necesariasList.innerHTML = aviso.condiciones_necesarias.map(c => `<li>${c}</li>`).join('') || '<li>No se especificaron condiciones necesarias.</li>';
+        deseablesList.innerHTML = aviso.condiciones_deseables.map(c => `<li>${c}</li>`).join('') || '<li>No se especificaron condiciones deseables.</li>';
 
         const path = window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/'));
         const link = `${window.location.origin}${path}/index.html?avisoId=${aviso.id}`;

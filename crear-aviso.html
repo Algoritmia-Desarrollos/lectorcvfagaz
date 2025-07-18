@@ -8,11 +8,11 @@
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
-<body class="dark-theme">
+<body>
   <div class="form-container">
-    <div class="form-header">
+    <div class="dashboard-header">
         <h1>Crear Búsqueda Laboral</h1>
-        <a href="lista-avisos.html" class="action-btn">Ver Panel</a>
+        <a href="lista-avisos.html" class="action-btn">Ver Mis Búsquedas</a>
     </div>
     
     <form id="aviso-form">
@@ -43,9 +43,9 @@
         </div>
 
         <div class="form-section">
-            <h2>Condiciones de análisis</h2>
+            <h2>Condiciones de análisis para la IA</h2>
             <div class="form-group">
-                <label for="necesaria-input">Condiciones necesarias</label>
+                <label for="necesaria-input">Condiciones necesarias (Excluyentes)</label>
                 <div class="condition-input-group">
                     <input type="text" id="necesaria-input" placeholder="Ej: 3 años de experiencia en React">
                     <button type="button" class="add-btn" id="add-necesaria-btn">+</button>
@@ -53,7 +53,7 @@
                 <ul id="necesarias-list" class="conditions-list"></ul>
             </div>
             <div class="form-group">
-                <label for="deseable-input">Condiciones deseables</label>
+                <label for="deseable-input">Condiciones deseables (Suman puntos)</label>
                 <div class="condition-input-group">
                     <input type="text" id="deseable-input" placeholder="Ej: Conocimientos de TypeScript">
                     <button type="button" class="add-btn" id="add-deseable-btn">+</button>
@@ -63,8 +63,7 @@
         </div>
 
         <div class="form-actions">
-            <button type="button" class="action-btn cancel-btn">Cancelar</button>
-            <button type="submit" class="action-btn download-btn">Guardar</button>
+            <button type="submit" class="action-btn primary-btn">Guardar y Publicar</button>
         </div>
     </form>
 
@@ -73,6 +72,6 @@
     </div>
   </div>
   
-  <script src="crear-aviso.js"></script>
+  <script type="module" src="crear-aviso.js"></script>
 </body>
 </html>

@@ -56,13 +56,15 @@ window.addEventListener('DOMContentLoaded', async () => {
 
     avisos.forEach(aviso => {
         const postulacionesCount = candidatos.filter(c => c.avisoId === aviso.id).length;
-        const validoHasta = new Date(aviso.validoHasta).toLocaleDateString('es-AR');
+        
+        // CORRECCIÓN: Usar snake_case para coincidir con la base de datos
+        const validoHasta = new Date(aviso.valido_hasta).toLocaleDateString('es-AR');
 
         const row = document.createElement('tr');
         row.innerHTML = `
             <td>${aviso.id}</td>
             <td><strong>${aviso.titulo}</strong></td>
-            <td>${postulacionesCount} / ${aviso.maxCV}</td>
+            <td>${postulacionesCount} / ${aviso.max_cv}</td>
             <td>${validoHasta}</td>
             <td>
                 <div class="actions-group">

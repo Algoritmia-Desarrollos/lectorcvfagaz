@@ -64,6 +64,7 @@ async function cargarYProcesarCandidatos(db, avisoId) {
         return;
     }
 
+    // NOVEDAD: Muestra inmediatamente todos los candidatos (los nuevos aparecerán como "Analizando...")
     actualizarVistaCandidatos();
     filtroContainer.classList.remove('hidden');
 
@@ -71,11 +72,16 @@ async function cargarYProcesarCandidatos(db, avisoId) {
     if (nuevosCandidatos.length > 0) {
         processingStatus.textContent = `Analizando ${nuevosCandidatos.length} nuevos CVs...`;
         
+        let procesadosCount = 0;
         for (const cv of nuevosCandidatos) {
+            procesadosCount++;
+            const nombreOriginal = cv.nombreArchivo || "candidato";
+            processingStatus.textContent = `Procesando ${procesadosCount} de ${nuevosCandidatos.length}... (${nombreOriginal})`;
             try {
                 const textoCV = await extraerTextoOCR(cv.base64);
                 const iaData = await calificarCVConIA(textoCV, avisoActivo);
                 
+                // Actualizar el objeto en la caché local
                 cv.texto = textoCV;
                 cv.nombreCandidato = iaData.nombreCompleto;
                 cv.email = iaData.email;
@@ -88,6 +94,7 @@ async function cargarYProcesarCandidatos(db, avisoId) {
                 cv.calificacion = "Error"; // Marcar como error
                 cv.resumen = `El análisis falló: ${error.message}`;
             }
+            // Guardar en la DB y refrescar la tabla para mostrar el cambio
             await actualizarCandidatoEnDB(db, cv);
             actualizarVistaCandidatos();
         }
@@ -97,18 +104,22 @@ async function cargarYProcesarCandidatos(db, avisoId) {
     }
 }
 
+
 // --- FUNCIÓN CENTRAL PARA FILTRAR, ORDENAR Y RENDERIZAR ---
 function actualizarVistaCandidatos() {
     const filtro = filtroNombre.value.toLowerCase();
+
     const candidatosFiltrados = archivosCache.filter(cv => {
         const nombre = (cv.nombreCandidato || cv.nombreArchivo || '').toLowerCase();
         return nombre.includes(filtro);
     });
+
     candidatosFiltrados.sort((a, b) => {
         const scoreA = (typeof a.calificacion === 'number' ? a.calificacion : 0);
         const scoreB = (typeof b.calificacion === 'number' ? b.calificacion : 0);
         return scoreB - scoreA;
     });
+
     resumenesList.innerHTML = '';
     if (candidatosFiltrados.length === 0) {
         resumenesList.innerHTML = '<tr><td colspan="5" style="text-align: center;">No se encontraron candidatos.</td></tr>';
@@ -142,7 +153,7 @@ resumenesList.addEventListener('click', (e) => {
 });
 
 // --- FUNCIÓN FETCH CON TIMEOUT ---
-async function fetchWithTimeout(resource, options = {}, timeout = 60000) { // Timeout de 60 segundos
+async function fetchWithTimeout(resource, options = {}, timeout = 60000) {
     const controller = new AbortController();
     const id = setTimeout(() => controller.abort(), timeout);
 
@@ -156,57 +167,23 @@ async function fetchWithTimeout(resource, options = {}, timeout = 60000) { // Ti
     } catch (error) {
         clearTimeout(id);
         if (error.name === 'AbortError') {
-            throw new Error('La solicitud a la IA tardó demasiado y fue cancelada (Timeout).');
+            throw new Error('La solicitud a la IA tardó demasiado (Timeout).');
         }
         throw error;
     }
 }
 
-// --- LÓGICA DE IA CON PROMPT MEJORADO ---
+// --- LÓGICA DE IA ---
 async function calificarCVConIA(textoCV, aviso) {
     const textoCVOptimizado = textoCV.substring(0, 4000);
-    const contextoAviso = `
-        Título del Puesto: ${aviso.titulo}
-        Condiciones Necesarias (Excluyentes y Críticas): ${aviso.condicionesNecesarias.join(', ')}
-        Condiciones Deseables (Suman puntos extra): ${aviso.condicionesDeseables.join(', ')}
-    `;
-    
-    // NOVEDAD: Prompt mucho más específico
-    const prompt = `
-        Eres un reclutador senior de RRHH con más de 15 años de experiencia, especializado en perfiles técnicos. Tu tarea es analizar un CV en comparación con un aviso de trabajo específico. Debes ser extremadamente estricto, detallista y objetivo.
-
-        **TAREA:**
-        Compara el "TEXTO DEL CV" con el "CONTEXTO DEL AVISO". Devuelve tu análisis únicamente en formato JSON con 5 claves: "nombreCompleto", "email", "telefono", "calificacion" y "justificacion".
-
-        **REGLAS DE ANÁLISIS Y CALIFICACIÓN (MUY IMPORTANTE):**
-        1.  **"nombreCompleto", "email", "telefono"**: Extrae los datos de contacto del candidato del CV. Sé preciso.
-        2.  **"calificacion"**: Asigna una nota numérica de 1 a 100. La distribución de notas debe ser amplia para diferenciar bien a los candidatos.
-            - **Filtro Excluyente:** Si el candidato **NO CUMPLE** con **TODAS Y CADA UNA** de las "Condiciones Necesarias", la nota **NUNCA puede ser superior a 40**.
-            - **Base de Aprobado:** Si el candidato cumple con **todas** las "Condiciones Necesarias", parte de una base de 70 puntos.
-            - **Puntos Extra:** A partir de los 70 puntos, suma puntos por cada "Condición Deseable" que cumpla. La experiencia general relevante (años en puestos similares, tecnologías adyacentes, etc.) también suma puntos. Sé granular, no todos los que cumplen lo deseable merecen la misma nota.
-            - **Regla Anti-Empate:** Si dos perfiles son muy similares, utiliza los años de experiencia o la relevancia de sus roles anteriores como factor de desempate para asignar una calificación ligeramente diferente. Evita asignar la misma nota a muchos candidatos.
-        3.  **"justificacion"**: Redacta un párrafo de análisis profesional y bien justificado. **No des una lista de puntos**. Debe ser un texto cohesionado que explique el porqué de la nota.
-            - Comienza indicando si cumple o no con el filtro de "Condiciones Necesarias".
-            - Detalla qué fortalezas clave tiene el candidato que se alinean con la descripción del puesto.
-            - Menciona qué "Condiciones Deseables" cumple.
-            - Si la nota es baja, explica de forma constructiva las carencias principales o por qué no es un perfil adecuado para este aviso en particular.
-
-        **CONTEXTO DEL AVISO:**
-        """
-        ${contextoAviso}
-        """
-
-        **TEXTO DEL CV:**
-        """
-        ${textoCVOptimizado}
-        """
-    `;
+    const contextoAviso = `Título del Puesto: ${aviso.titulo}, Condiciones Necesarias: ${aviso.condicionesNecesarias.join(', ')}, Condiciones Deseables: ${aviso.condicionesDeseables.join(', ')}`;
+    const prompt = `Analiza el CV y compáralo con el aviso. Devuelve un JSON con 5 claves: "nombreCompleto", "email", "telefono", "calificacion" (número de 1 a 100) y "justificacion". REGLAS: Si no cumple TODAS las condiciones necesarias, la calificación no puede superar 40. Si las cumple, parte de 70 y suma puntos por las deseables. AVISO: """${contextoAviso}""" CV: """${textoCVOptimizado}"""`;
     
     const response = await fetchWithTimeout("https://api.openai.com/v1/chat/completions", {
         method: "POST",
         headers: { "Authorization": `Bearer ${OPENAI_API_KEY}`, "Content-Type": "application/json" },
         body: JSON.stringify({
-            model: "gpt-3.5-turbo", 
+            model: "gpt-3.5-turbo",
             response_format: { "type": "json_object" },
             messages: [{ role: "user", content: prompt }],
             temperature: 0.1,
@@ -240,6 +217,7 @@ function renderizarFila(cv) {
     const notasClass = cv.notas ? 'has-notes' : '';
     const row = document.createElement('tr');
     row.dataset.id = cv.id;
+    
     row.innerHTML = `
         <td><strong>${nombreCandidato}</strong></td>
         <td>${calificacionMostrada}</td>

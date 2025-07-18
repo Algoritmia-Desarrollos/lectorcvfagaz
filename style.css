@@ -306,7 +306,7 @@ a:hover {
 
 /* --- DETALLES DEL AVISO --- */
 .details-body {
-    padding: 30px;
+    padding-top: 20px;
 }
 .details-grid {
     display: grid;
