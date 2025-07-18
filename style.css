@@ -291,8 +291,6 @@ a:hover {
     font-weight: 500;
     color: var(--dark-gray);
 }
-
-/* NOVEDAD: Campo de búsqueda */
 .filtro-container {
     margin-bottom: 20px;
 }
@@ -307,14 +305,6 @@ a:hover {
 }
 
 /* --- DETALLES DEL AVISO --- */
-.details-header {
-    padding: 30px;
-    border-bottom: 1px solid var(--medium-gray);
-}
-.details-header h1 {
-    margin: 0;
-    color: var(--dark-gray);
-}
 .details-body {
     padding: 30px;
 }

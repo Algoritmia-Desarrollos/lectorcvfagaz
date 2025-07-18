@@ -97,24 +97,17 @@ async function cargarYProcesarCandidatos(db, avisoId) {
     actualizarVistaCandidatos();
 }
 
-
-// --- NOVEDAD: FUNCIÓN CENTRAL PARA FILTRAR, ORDENAR Y RENDERIZAR ---
+// --- FUNCIÓN CENTRAL PARA FILTRAR, ORDENAR Y RENDERIZAR ---
 function actualizarVistaCandidatos() {
     const filtro = filtroNombre.value.toLowerCase();
-
-    // 1. Filtrar
     const candidatosFiltrados = archivosCache.filter(cv => {
         const nombre = (cv.nombreCandidato || cv.nombreArchivo || '').toLowerCase();
         return nombre.includes(filtro);
     });
-
-    // 2. Ordenar por calificación (de mayor a menor)
     candidatosFiltrados.sort((a, b) => (b.calificacion || 0) - (a.calificacion || 0));
-
-    // 3. Renderizar
-    resumenesList.innerHTML = ''; // Limpiar la tabla
+    resumenesList.innerHTML = '';
     if (candidatosFiltrados.length === 0) {
-        resumenesList.innerHTML = '<tr><td colspan="5" style="text-align: center;">No se encontraron candidatos que coincidan con la búsqueda.</td></tr>';
+        resumenesList.innerHTML = '<tr><td colspan="5" style="text-align: center;">No se encontraron candidatos.</td></tr>';
     } else {
         candidatosFiltrados.forEach(cv => renderizarTarjeta(cv));
     }
@@ -124,7 +117,6 @@ function actualizarVistaCandidatos() {
 filtroNombre.addEventListener('input', actualizarVistaCandidatos);
 
 resumenesList.addEventListener('click', (e) => {
-    // ... (La lógica de esta función es idéntica a la versión anterior, no necesita cambios)
     const button = e.target.closest('.action-btn');
     if (!button) return;
     const row = e.target.closest('tr');
@@ -144,16 +136,58 @@ resumenesList.addEventListener('click', (e) => {
             break;
     }
 });
-// ... (El resto de funciones de modales, DB, OCR e IA son idénticas a la versión anterior)
 
+// --- LÓGICA DE IA OPTIMIZADA ---
+async function calificarCVConIA(textoCV, aviso) {
+    if (!textoCV || !aviso) {
+        return { calificacion: 0, justificacion: "Faltan datos para la comparación." };
+    }
+    
+    // NOVEDAD: Se trunca el texto del CV para enviar menos tokens
+    const textoCVOptimizado = textoCV.substring(0, 4000);
+
+    const contextoAviso = `
+        Título del Puesto: ${aviso.titulo}
+        Condiciones Necesarias (Excluyentes): ${aviso.condicionesNecesarias.join(', ')}
+        Condiciones Deseables (Suman puntos): ${aviso.condicionesDeseables.join(', ')}
+    `;
+    const prompt = `
+        Analiza el CV y compáralo con el aviso. Devuelve un JSON con 5 claves: "nombreCompleto", "email", "telefono", "calificacion" (número de 1 a 100) y "justificacion".
+        REGLAS DE CALIFICACIÓN: Si no cumple TODAS las condiciones necesarias, la calificación no puede superar 40. Si las cumple, parte de 70 y suma puntos por las deseables.
+        AVISO: """${contextoAviso}"""
+        CV: """${textoCVOptimizado}"""
+    `;
+    
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${OPENAI_API_KEY}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+            // NOVEDAD: Cambio a un modelo más rápido y económico
+            model: "gpt-3.5-turbo", 
+            response_format: { "type": "json_object" },
+            messages: [{ role: "user", content: prompt }],
+            temperature: 0.1,
+        })
+    });
+    if (!response.ok) throw new Error(`API Error: ${response.status}`);
+    const data = await response.json();
+    const content = JSON.parse(data.choices[0].message.content);
+    return {
+        nombreCompleto: content.nombreCompleto || null,
+        email: content.email || null,
+        telefono: content.telefono || null,
+        calificacion: content.calificacion || 0,
+        justificacion: content.justificacion || "No se pudo generar la justificación."
+    };
+}
+
+// --- El resto de las funciones (renderizado, modales, DB, OCR) son idénticas ---
 function renderizarTarjeta(cv) {
     const nombreCandidato = cv.nombreCandidato || cv.nombreArchivo.replace(/\.pdf$/i, '');
     const calificacionMostrada = cv.calificacion !== null ? `<strong>${cv.calificacion} / 100</strong>` : '-';
     const notasClass = cv.notas ? 'has-notes' : '';
-
     const row = document.createElement('tr');
     row.dataset.id = cv.id;
-    
     row.innerHTML = `
         <td><strong>${nombreCandidato}</strong></td>
         <td>${calificacionMostrada}</td>
@@ -168,19 +202,16 @@ function renderizarTarjeta(cv) {
     `;
     resumenesList.appendChild(row);
 }
-
 modalCloseBtn.addEventListener('click', cerrarModal);
 modalContainer.addEventListener('click', (e) => {
     if (e.target === modalContainer) {
         cerrarModal();
     }
 });
-
 function abrirModal() {
     modalContainer.classList.remove('hidden');
     setTimeout(() => modalContainer.classList.add('visible'), 10);
 }
-
 function cerrarModal() {
     modalContainer.classList.remove('visible');
     setTimeout(() => {
@@ -188,23 +219,19 @@ function cerrarModal() {
         modalBody.innerHTML = '';
     }, 300);
 }
-
 function abrirModalResumen(cv) {
     modalTitle.textContent = `Análisis de ${cv.nombreCandidato || 'Candidato'}`;
     modalBody.innerHTML = `<h4>Calificación: ${cv.calificacion}/100</h4><p>${cv.resumen ? cv.resumen.replace(/\n/g, '<br>') : 'No hay análisis disponible.'}</p>`;
     abrirModal();
 }
-
 function abrirModalContacto(cv) {
     modalTitle.textContent = `Contacto de ${cv.nombreCandidato || 'Candidato'}`;
     modalBody.innerHTML = `<ul><li><strong>Nombre:</strong> ${cv.nombreCandidato || 'No extraído'}</li><li><strong>Email:</strong> ${cv.email || 'No extraído'}</li><li><strong>Teléfono:</strong> ${cv.telefono || 'No extraído'}</li></ul>`;
     abrirModal();
 }
-
 async function abrirModalNotas(cv) {
     modalTitle.textContent = `Notas sobre ${cv.nombreCandidato || 'Candidato'}`;
     modalBody.innerHTML = `<textarea id="notas-textarea" placeholder="Escribe tus notas aquí...">${cv.notas || ''}</textarea><div class="modal-footer"><button id="guardar-notas-btn" class="action-btn primary-btn">Guardar</button></div>`;
-    
     document.getElementById('guardar-notas-btn').onclick = async () => {
         const nuevasNotas = document.getElementById('notas-textarea').value;
         const db = await abrirDB();
@@ -216,7 +243,6 @@ async function abrirModalNotas(cv) {
     };
     abrirModal();
 }
-
 async function getAvisoById(db, id) {
     return new Promise((resolve, reject) => {
         const transaction = db.transaction(['avisos'], 'readonly');
@@ -245,56 +271,6 @@ async function actualizarCandidatoEnDB(db, cv) {
         request.onerror = (e) => reject(e.target.error);
     });
 }
-
-async function calificarCVConIA(textoCV, aviso) {
-    const contextoAviso = `
-        Título del Puesto: ${aviso.titulo}
-        Descripción: ${aviso.descripcion}
-        Condiciones Necesarias (Excluyentes y Críticas): ${aviso.condicionesNecesarias.join(', ')}
-        Condiciones Deseables (Suman puntos extra): ${aviso.condicionesDeseables.join(', ')}
-    `;
-    const prompt = `
-        Eres un reclutador experto de RRHH. Tu tarea es analizar un CV en comparación con un aviso de trabajo específico. Debes ser estricto y objetivo.
-        **TAREA:**
-        Compara el "TEXTO DEL CV" con el "CONTEXTO DEL AVISO". Devuelve tu análisis únicamente en formato JSON con 5 claves: "nombreCompleto", "email", "telefono", "calificacion" y "justificacion".
-        **REGLAS DE ANÁLISIS Y CALIFICACIÓN:**
-        1.  **"nombreCompleto", "email", "telefono"**: Extrae los datos de contacto del candidato del CV.
-        2.  **"calificacion"**: Asigna una nota numérica de 1 a 100.
-            - Si el candidato **NO CUMPLE** con **TODAS** las "Condiciones Necesarias", la nota **NO PUEDE SER SUPERIOR a 40**. Es un filtro excluyente.
-            - Si cumple con todas las necesarias, parte de una base de 70 puntos.
-            - Suma puntos por cada "Condición Deseable" que cumpla y por experiencia general relevante, hasta un máximo de 100.
-        3.  **"justificacion"**: Redacta un párrafo justificando la nota. Empieza mencionando si cumple o no con los requisitos necesarios. Luego, detalla las fortalezas y debilidades del candidato en relación al puesto. Sé claro y directo.
-        **CONTEXTO DEL AVISO:**
-        """
-        ${contextoAviso}
-        """
-        **TEXTO DEL CV:**
-        """
-        ${textoCV}
-        """
-    `;
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: { "Authorization": `Bearer ${OPENAI_API_KEY}`, "Content-Type": "application/json" },
-        body: JSON.stringify({
-            model: "gpt-4-1106-preview",
-            response_format: { "type": "json_object" },
-            messages: [{ role: "user", content: prompt }],
-            temperature: 0.1,
-        })
-    });
-    if (!response.ok) throw new Error(`API Error: ${response.status}`);
-    const data = await response.json();
-    const content = JSON.parse(data.choices[0].message.content);
-    return {
-        nombreCompleto: content.nombreCompleto,
-        email: content.email,
-        telefono: content.telefono,
-        calificacion: content.calificacion,
-        justificacion: content.justificacion
-    };
-}
-
 async function extraerTextoOCR(base64) {
   try {
     const pdf = await pdfjsLib.getDocument(base64).promise;
