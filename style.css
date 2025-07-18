@@ -35,7 +35,7 @@ a:hover {
     text-decoration: underline;
 }
 
-.panel-container {
+.panel-container, .details-container {
   max-width: 1100px;
   margin: 30px auto;
   padding: 30px;
@@ -292,15 +292,21 @@ a:hover {
     color: var(--dark-gray);
 }
 
-/* --- DETALLES DEL AVISO --- */
-.details-container {
-    max-width: 900px;
-    margin: 30px auto;
-    background: var(--white);
-    border-radius: 16px;
-    box-shadow: var(--shadow-md);
-    overflow: hidden;
+/* NOVEDAD: Campo de búsqueda */
+.filtro-container {
+    margin-bottom: 20px;
 }
+#filtro-nombre {
+    width: 100%;
+    max-width: 400px;
+    padding: 12px;
+    border: 1px solid var(--border-gray);
+    border-radius: 8px;
+    font-size: 14px;
+    box-sizing: border-box;
+}
+
+/* --- DETALLES DEL AVISO --- */
 .details-header {
     padding: 30px;
     border-bottom: 1px solid var(--medium-gray);

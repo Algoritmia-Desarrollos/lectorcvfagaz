@@ -6,8 +6,10 @@ const modalBody = document.getElementById('modal-body');
 const modalCloseBtn = document.getElementById('modal-close');
 const panelTitle = document.getElementById('panel-title');
 const processingStatus = document.getElementById('processing-status');
+const filtroContainer = document.getElementById('filtro-container');
+const filtroNombre = document.getElementById('filtro-nombre');
 
-const OPENAI_API_KEY = "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";
+const OPENAI_API_KEY = "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"; // Reemplaza con tu clave
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 let archivosCache = [];
 let avisoActivo = null;
@@ -65,34 +67,185 @@ async function cargarYProcesarCandidatos(db, avisoId) {
     const nuevosCandidatos = candidatos.filter(cv => cv.calificacion === null);
     processingStatus.textContent = nuevosCandidatos.length > 0 ? `Analizando ${nuevosCandidatos.length} nuevos CVs...` : "Todos los candidatos están calificados.";
     
-    resumenesList.innerHTML = '';
-    for (const cv of candidatos) {
-        if (cv.calificacion === null) {
-            try {
-                const textoCV = await extraerTextoOCR(cv.base64);
-                const iaData = await calificarCVConIA(textoCV, avisoActivo);
-                
-                cv.texto = textoCV;
-                cv.nombreCandidato = iaData.nombreCompleto;
-                cv.email = iaData.email;
-                cv.telefono = iaData.telefono;
-                cv.calificacion = iaData.calificacion;
-                cv.resumen = iaData.justificacion;
-                
-                await actualizarCandidatoEnDB(db, cv);
-            } catch (error) {
-                console.error(`Falló el procesamiento para el CV ${cv.id}:`, error);
-                cv.calificacion = 0;
-                cv.resumen = "Error durante el análisis de IA.";
-                await actualizarCandidatoEnDB(db, cv);
-            }
+    let procesadosCount = 0;
+    for (const cv of nuevosCandidatos) {
+        procesadosCount++;
+        const nombreOriginal = cv.nombreArchivo || cv.nombre || "candidato";
+        processingStatus.textContent = `Procesando ${procesadosCount} de ${nuevosCandidatos.length}... (${nombreOriginal})`;
+        try {
+            const textoCV = await extraerTextoOCR(cv.base64);
+            const iaData = await calificarCVConIA(textoCV, avisoActivo);
+            
+            cv.texto = textoCV;
+            cv.nombreCandidato = iaData.nombreCompleto;
+            cv.email = iaData.email;
+            cv.telefono = iaData.telefono;
+            cv.calificacion = iaData.calificacion;
+            cv.resumen = iaData.justificacion;
+            
+            await actualizarCandidatoEnDB(db, cv);
+        } catch (error) {
+            console.error(`Falló el procesamiento para el CV ${cv.id}:`, error);
+            cv.calificacion = 0;
+            cv.resumen = "Error durante el análisis de IA.";
+            await actualizarCandidatoEnDB(db, cv);
         }
-        renderizarTarjeta(cv);
     }
+
     if (nuevosCandidatos.length > 0) processingStatus.textContent = "Análisis completado.";
+    filtroContainer.classList.remove('hidden');
+    actualizarVistaCandidatos();
 }
 
-// --- LÓGICA DE IA ---
+
+// --- NOVEDAD: FUNCIÓN CENTRAL PARA FILTRAR, ORDENAR Y RENDERIZAR ---
+function actualizarVistaCandidatos() {
+    const filtro = filtroNombre.value.toLowerCase();
+
+    // 1. Filtrar
+    const candidatosFiltrados = archivosCache.filter(cv => {
+        const nombre = (cv.nombreCandidato || cv.nombreArchivo || '').toLowerCase();
+        return nombre.includes(filtro);
+    });
+
+    // 2. Ordenar por calificación (de mayor a menor)
+    candidatosFiltrados.sort((a, b) => (b.calificacion || 0) - (a.calificacion || 0));
+
+    // 3. Renderizar
+    resumenesList.innerHTML = ''; // Limpiar la tabla
+    if (candidatosFiltrados.length === 0) {
+        resumenesList.innerHTML = '<tr><td colspan="5" style="text-align: center;">No se encontraron candidatos que coincidan con la búsqueda.</td></tr>';
+    } else {
+        candidatosFiltrados.forEach(cv => renderizarTarjeta(cv));
+    }
+}
+
+// --- MANEJO DE EVENTOS ---
+filtroNombre.addEventListener('input', actualizarVistaCandidatos);
+
+resumenesList.addEventListener('click', (e) => {
+    // ... (La lógica de esta función es idéntica a la versión anterior, no necesita cambios)
+    const button = e.target.closest('.action-btn');
+    if (!button) return;
+    const row = e.target.closest('tr');
+    const cvId = parseInt(row.dataset.id);
+    const action = button.dataset.action;
+    const cv = archivosCache.find(c => c.id === cvId);
+    if (!cv) return;
+    switch (action) {
+        case 'ver-resumen':
+            abrirModalResumen(cv);
+            break;
+        case 'ver-contacto':
+            abrirModalContacto(cv);
+            break;
+        case 'ver-notas':
+            abrirModalNotas(cv);
+            break;
+    }
+});
+// ... (El resto de funciones de modales, DB, OCR e IA son idénticas a la versión anterior)
+
+function renderizarTarjeta(cv) {
+    const nombreCandidato = cv.nombreCandidato || cv.nombreArchivo.replace(/\.pdf$/i, '');
+    const calificacionMostrada = cv.calificacion !== null ? `<strong>${cv.calificacion} / 100</strong>` : '-';
+    const notasClass = cv.notas ? 'has-notes' : '';
+
+    const row = document.createElement('tr');
+    row.dataset.id = cv.id;
+    
+    row.innerHTML = `
+        <td><strong>${nombreCandidato}</strong></td>
+        <td>${calificacionMostrada}</td>
+        <td><button class="action-btn" data-action="ver-resumen">Análisis IA</button></td>
+        <td><button class="action-btn ${notasClass}" data-action="ver-notas">Notas</button></td>
+        <td>
+            <div class="actions-group">
+                <a href="${cv.base64}" download="${nombreCandidato.replace(/ /g, '_')}.pdf" class="action-btn primary-btn">Ver CV</a>
+                <button class="action-btn" data-action="ver-contacto">Contacto</button>
+            </div>
+        </td>
+    `;
+    resumenesList.appendChild(row);
+}
+
+modalCloseBtn.addEventListener('click', cerrarModal);
+modalContainer.addEventListener('click', (e) => {
+    if (e.target === modalContainer) {
+        cerrarModal();
+    }
+});
+
+function abrirModal() {
+    modalContainer.classList.remove('hidden');
+    setTimeout(() => modalContainer.classList.add('visible'), 10);
+}
+
+function cerrarModal() {
+    modalContainer.classList.remove('visible');
+    setTimeout(() => {
+        modalContainer.classList.add('hidden');
+        modalBody.innerHTML = '';
+    }, 300);
+}
+
+function abrirModalResumen(cv) {
+    modalTitle.textContent = `Análisis de ${cv.nombreCandidato || 'Candidato'}`;
+    modalBody.innerHTML = `<h4>Calificación: ${cv.calificacion}/100</h4><p>${cv.resumen ? cv.resumen.replace(/\n/g, '<br>') : 'No hay análisis disponible.'}</p>`;
+    abrirModal();
+}
+
+function abrirModalContacto(cv) {
+    modalTitle.textContent = `Contacto de ${cv.nombreCandidato || 'Candidato'}`;
+    modalBody.innerHTML = `<ul><li><strong>Nombre:</strong> ${cv.nombreCandidato || 'No extraído'}</li><li><strong>Email:</strong> ${cv.email || 'No extraído'}</li><li><strong>Teléfono:</strong> ${cv.telefono || 'No extraído'}</li></ul>`;
+    abrirModal();
+}
+
+async function abrirModalNotas(cv) {
+    modalTitle.textContent = `Notas sobre ${cv.nombreCandidato || 'Candidato'}`;
+    modalBody.innerHTML = `<textarea id="notas-textarea" placeholder="Escribe tus notas aquí...">${cv.notas || ''}</textarea><div class="modal-footer"><button id="guardar-notas-btn" class="action-btn primary-btn">Guardar</button></div>`;
+    
+    document.getElementById('guardar-notas-btn').onclick = async () => {
+        const nuevasNotas = document.getElementById('notas-textarea').value;
+        const db = await abrirDB();
+        const candidato = archivosCache.find(c => c.id === cv.id);
+        candidato.notas = nuevasNotas;
+        await actualizarCandidatoEnDB(db, candidato);
+        cerrarModal();
+        actualizarVistaCandidatos();
+    };
+    abrirModal();
+}
+
+async function getAvisoById(db, id) {
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction(['avisos'], 'readonly');
+        const store = transaction.objectStore('avisos');
+        const request = store.get(id);
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = (e) => reject(e.target.error);
+    });
+}
+async function getCandidatosByAvisoId(db, avisoId) {
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction(['candidatos'], 'readonly');
+        const store = transaction.objectStore('candidatos');
+        const index = store.index('avisoId');
+        const request = index.getAll(avisoId);
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = (e) => reject(e.target.error);
+    });
+}
+async function actualizarCandidatoEnDB(db, cv) {
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction(['candidatos'], 'readwrite');
+        const store = transaction.objectStore('candidatos');
+        const request = store.put(cv);
+        request.onsuccess = () => resolve();
+        request.onerror = (e) => reject(e.target.error);
+    });
+}
+
 async function calificarCVConIA(textoCV, aviso) {
     const contextoAviso = `
         Título del Puesto: ${aviso.titulo}
@@ -142,132 +295,6 @@ async function calificarCVConIA(textoCV, aviso) {
     };
 }
 
-
-// --- RENDERIZADO Y MODALES ---
-function renderizarTarjeta(cv) {
-    const nombreCandidato = cv.nombreCandidato || cv.nombreArchivo.replace(/\.pdf$/i, '');
-    const calificacionMostrada = cv.calificacion !== null ? `<strong>${cv.calificacion} / 100</strong>` : '-';
-    const notasClass = cv.notas ? 'has-notes' : '';
-
-    const row = document.createElement('tr');
-    row.dataset.id = cv.id;
-    
-    row.innerHTML = `
-        <td><strong>${nombreCandidato}</strong></td>
-        <td>${calificacionMostrada}</td>
-        <td><button class="action-btn" data-action="ver-resumen">Análisis IA</button></td>
-        <td><button class="action-btn ${notasClass}" data-action="ver-notas">Notas</button></td>
-        <td>
-            <div class="actions-group">
-                <a href="${cv.base64}" download="${nombreCandidato.replace(/ /g, '_')}.pdf" class="action-btn primary-btn">Ver CV</a>
-                <button class="action-btn" data-action="ver-contacto">Contacto</button>
-            </div>
-        </td>
-    `;
-
-    const existingRow = resumenesList.querySelector(`tr[data-id='${cv.id}']`);
-    if(existingRow) {
-        existingRow.replaceWith(row);
-    } else {
-        resumenesList.appendChild(row);
-    }
-}
-
-resumenesList.addEventListener('click', (e) => {
-    const button = e.target.closest('.action-btn');
-    if (!button) return;
-    const card = e.target.closest('tr');
-    const cvId = parseInt(card.dataset.id);
-    const action = button.dataset.action;
-    const cv = archivosCache.find(c => c.id === cvId);
-    if (!cv) return;
-    switch (action) {
-        case 'ver-resumen':
-            abrirModalResumen(cv);
-            break;
-        case 'ver-contacto':
-            abrirModalContacto(cv);
-            break;
-        case 'ver-notas':
-            abrirModalNotas(cv);
-            break;
-    }
-});
-
-modalCloseBtn.addEventListener('click', cerrarModal);
-modalContainer.addEventListener('click', (e) => {
-    if (e.target === modalContainer) {
-        cerrarModal();
-    }
-});
-function abrirModal() {
-    modalContainer.classList.remove('hidden');
-    setTimeout(() => modalContainer.classList.add('visible'), 10);
-}
-function cerrarModal() {
-    modalContainer.classList.remove('visible');
-    setTimeout(() => {
-        modalContainer.classList.add('hidden');
-        modalBody.innerHTML = '';
-    }, 300);
-}
-function abrirModalResumen(cv) {
-    modalTitle.textContent = `Análisis de ${cv.nombreCandidato || 'Candidato'}`;
-    modalBody.innerHTML = `<h4>Calificación: ${cv.calificacion}/100</h4><p>${cv.resumen ? cv.resumen.replace(/\n/g, '<br>') : 'No hay análisis disponible.'}</p>`;
-    abrirModal();
-}
-function abrirModalContacto(cv) {
-    modalTitle.textContent = `Contacto de ${cv.nombreCandidato || 'Candidato'}`;
-    modalBody.innerHTML = `<ul><li><strong>Nombre:</strong> ${cv.nombreCandidato || 'No extraído'}</li><li><strong>Email:</strong> ${cv.email || 'No extraído'}</li><li><strong>Teléfono:</strong> ${cv.telefono || 'No extraído'}</li></ul>`;
-    abrirModal();
-}
-async function abrirModalNotas(cv) {
-    modalTitle.textContent = `Notas sobre ${cv.nombreCandidato || 'Candidato'}`;
-    modalBody.innerHTML = `<textarea id="notas-textarea" placeholder="Escribe tus notas aquí...">${cv.notas || ''}</textarea><div class="modal-footer"><button id="guardar-notas-btn" class="action-btn primary-btn">Guardar</button></div>`;
-    
-    document.getElementById('guardar-notas-btn').onclick = async () => {
-        const nuevasNotas = document.getElementById('notas-textarea').value;
-        const db = await abrirDB();
-        const candidato = archivosCache.find(c => c.id === cv.id);
-        candidato.notas = nuevasNotas;
-        await actualizarCandidatoEnDB(db, candidato);
-        cerrarModal();
-        renderizarTarjeta(candidato); // Re-render to update notes button style
-    };
-    abrirModal();
-}
-
-// --- FUNCIONES DE BASE DE DATOS ---
-async function getAvisoById(db, id) {
-    return new Promise((resolve, reject) => {
-        const transaction = db.transaction(['avisos'], 'readonly');
-        const store = transaction.objectStore('avisos');
-        const request = store.get(id);
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = (e) => reject(e.target.error);
-    });
-}
-async function getCandidatosByAvisoId(db, avisoId) {
-    return new Promise((resolve, reject) => {
-        const transaction = db.transaction(['candidatos'], 'readonly');
-        const store = transaction.objectStore('candidatos');
-        const index = store.index('avisoId');
-        const request = index.getAll(avisoId);
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = (e) => reject(e.target.error);
-    });
-}
-async function actualizarCandidatoEnDB(db, cv) {
-    return new Promise((resolve, reject) => {
-        const transaction = db.transaction(['candidatos'], 'readwrite');
-        const store = transaction.objectStore('candidatos');
-        const request = store.put(cv);
-        request.onsuccess = () => resolve();
-        request.onerror = (e) => reject(e.target.error);
-    });
-}
-
-// --- FUNCIÓN OCR ---
 async function extraerTextoOCR(base64) {
   try {
     const pdf = await pdfjsLib.getDocument(base64).promise;
