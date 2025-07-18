@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Detalles del Aviso</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="dark-theme">
+  <div class="panel-container">
+    <div class="form-header">
+      <h1 id="aviso-titulo">Cargando detalles del aviso...</h1>
+      <a href="lista-avisos.html" class="action-btn">Volver a mis avisos</a>
+    </div>
+
+    <div class="details-grid">
+        <div class="details-main">
+            <div class="details-section">
+                <h3>Información General</h3>
+                <p><strong>ID de Evaluación:</strong> <span id="aviso-id"></span></p>
+                <p><strong>Máxima cantidad de CV:</strong> <span id="aviso-max-cv"></span></p>
+                <p><strong>Válido hasta:</strong> <span id="aviso-valido-hasta"></span></p>
+            </div>
+            <div class="details-section">
+                <h3>Descripción del puesto:</h3>
+                <p id="aviso-descripcion"></p>
+            </div>
+             <div class="details-section">
+                <h3>Condiciones Necesarias</h3>
+                <ul id="necesarias-list" class="lista-condiciones"></ul>
+            </div>
+             <div class="details-section">
+                <h3>Condiciones Deseables</h3>
+                <ul id="deseables-list" class="lista-condiciones"></ul>
+            </div>
+        </div>
+
+        <div class="details-sidebar">
+            <div class="details-section share-section">
+                <h3>Link para postulantes</h3>
+                <input type="text" id="link-postulante" readonly>
+                <button id="copiar-link-btn" class="action-btn download-btn">Copiar</button>
+                <div class="qr-code">
+                    <canvas id="qr-canvas"></canvas>
+                </div>
+                <button id="compartir-btn" class="action-btn">Compartir este aviso</button>
+            </div>
+        </div>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
+  <script src="detalles-aviso.js"></script>
+</body>
+</html>

@@ -9,23 +9,24 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div class="resumenes-container">
+  <div class="panel-container">
     <div class="dashboard-header">
-      <h1>Panel de Candidatos</h1>
-      <a href="index.html" class="action-btn">Ir a Postulación</a>
+      <h1 id="panel-title">Panel de Candidatos</h1>
+      <a href="lista-avisos.html" class="action-btn">Ver todas las búsquedas</a>
     </div>
+
+    <div id="processing-status" class="processing-status hidden"></div>
     
-    <div class="cv-list-header">
+    <div id="cv-list-header" class="cv-list-header hidden">
       <div>NOMBRE</div>
       <div>CALIFICACIÓN</div>
-      <div>RESUMEN</div>
+      <div>ANÁLISIS</div>
       <div>NOTAS</div>
       <div>ACCIONES</div>
     </div>
 
     <div id="resumenes-list">
-      </div>
-
+        </div>
   </div>
 
   <div id="modal-container" class="modal-container hidden">

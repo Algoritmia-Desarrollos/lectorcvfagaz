@@ -7,40 +7,61 @@ const successView = document.getElementById('success-view');
 const avisoContainer = document.getElementById('aviso-container');
 const uploadSection = document.getElementById('upload-section');
 
-// --- LÓGICA PARA MOSTRAR EL AVISO ---
-window.addEventListener('DOMContentLoaded', () => {
-    const avisoJSON = localStorage.getItem('avisoDeTrabajoActivo');
+let avisoActivo = null;
 
-    if (avisoJSON) {
-        const aviso = JSON.parse(avisoJSON);
-        
-        avisoContainer.innerHTML = `
-            <div class="aviso-header">
-                <h1>${aviso.titulo}</h1>
-                <div class="aviso-meta">
-                    <span><strong>Cierre de postulación:</strong> ${aviso.validoHasta}</span>
-                    <span><strong>Cupo de CVs:</strong> ${aviso.maxCV}</span>
-                </div>
-            </div>
-            <p class="descripcion">${aviso.descripcion.replace(/\n/g, '<br>')}</p>
-            <h3>Condiciones Necesarias</h3>
-            <ul class="lista-condiciones">
-                ${aviso.condicionesNecesarias.map(item => `<li>${item}</li>`).join('')}
-            </ul>
-             <h3>Condiciones Deseables</h3>
-            <ul class="lista-condiciones">
-                ${aviso.condicionesDeseables.map(item => `<li>${item}</li>`).join('')}
-            </ul>
-        `;
-    } else {
-        avisoContainer.innerHTML = '<h1>Actualmente no hay búsquedas activas.</h1>';
+// --- Base de datos ---
+const DB_NAME = 'RecruitmentDB';
+function abrirDB() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, 1);
+    request.onerror = () => reject("Error");
+    request.onupgradeneeded = (event) => {
+      const db = event.target.result;
+      if (!db.objectStoreNames.contains('avisos')) db.createObjectStore('avisos', { keyPath: 'id' });
+      if (!db.objectStoreNames.contains('candidatos')) db.createObjectStore('candidatos', { keyPath: 'id' }).createIndex('avisoId', 'avisoId');
+    };
+    request.onsuccess = (event) => resolve(event.target.result);
+  });
+}
+
+// --- Lógica para mostrar el aviso ---
+window.addEventListener('DOMContentLoaded', async () => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const avisoId = parseInt(urlParams.get('avisoId'), 10);
+
+    if (!avisoId) {
+        avisoContainer.innerHTML = '<h1>Link de postulación inválido.</h1>';
         uploadSection.classList.add('hidden');
+        return;
     }
+    
+    const db = await abrirDB();
+    const transaction = db.transaction(['avisos'], 'readonly');
+    const store = transaction.objectStore('avisos');
+    const request = store.get(avisoId);
+
+    request.onsuccess = () => {
+        avisoActivo = request.result;
+        if (avisoActivo) {
+            avisoContainer.innerHTML = `
+                <div class="aviso-header">
+                    <h1>${avisoActivo.titulo}</h1>
+                    <div class="aviso-meta">
+                        <span><strong>Cierre:</strong> ${new Date(avisoActivo.validoHasta).toLocaleDateString('es-AR')}</span>
+                        <span><strong>Cupo:</strong> ${avisoActivo.maxCV}</span>
+                    </div>
+                </div>
+                <p class="descripcion">${avisoActivo.descripcion.replace(/\n/g, '<br>')}</p>
+            `;
+        } else {
+            avisoContainer.innerHTML = '<h1>Esta búsqueda laboral no fue encontrada.</h1>';
+            uploadSection.classList.add('hidden');
+        }
+    };
 });
 
-
-// --- LÓGICA DE SUBIDA DE ARCHIVO ---
-// ... (El resto del archivo index.js, incluyendo la lógica de subida de CV y las funciones de IndexedDB, se mantiene exactamente igual que en la versión anterior. No es necesario cambiarlo).
+// --- Lógica de subida de archivo ---
+let selectedFile = null;
 fileInput.addEventListener('change', (e) => {
   selectedFile = e.target.files[0];
   if (selectedFile && selectedFile.type === 'application/pdf') {
@@ -52,16 +73,17 @@ fileInput.addEventListener('change', (e) => {
     selectedFile = null;
   }
 });
+
 cvForm.addEventListener('submit', async (e) => {
   e.preventDefault();
-  if (!selectedFile) return;
+  if (!selectedFile || !avisoActivo) return;
   submitBtn.disabled = true;
   submitBtn.textContent = 'Enviando...';
   const reader = new FileReader();
   reader.onload = async function () {
     const base64 = reader.result;
     try {
-      await guardarCVEnDB(selectedFile.name, base64);
+      await guardarCVEnDB(selectedFile.name, base64, avisoActivo.id);
       formView.classList.add('hidden');
       successView.classList.remove('hidden');
     } catch (error) {
@@ -71,28 +93,15 @@ cvForm.addEventListener('submit', async (e) => {
   };
   reader.readAsDataURL(selectedFile);
 });
-const DB_NAME = 'CVDatabase';
-const STORE_NAME = 'cvs';
-function abrirDB() {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, 3);
-    request.onerror = () => reject("Error al abrir IndexedDB");
-    request.onupgradeneeded = (event) => {
-      const db = event.target.result;
-      if (!db.objectStoreNames.contains(STORE_NAME)) {
-          db.createObjectStore(STORE_NAME, { keyPath: 'id' });
-      }
-    };
-    request.onsuccess = (event) => resolve(event.target.result);
-  });
-}
-async function guardarCVEnDB(nombre, base64) {
+
+async function guardarCVEnDB(nombre, base64, avisoId) {
   const db = await abrirDB();
   return new Promise((resolve, reject) => {
-    const transaction = db.transaction([STORE_NAME], 'readwrite');
-    const objectStore = transaction.objectStore(STORE_NAME);
+    const transaction = db.transaction(['candidatos'], 'readwrite');
+    const objectStore = transaction.objectStore('candidatos');
     const nuevoCV = {
       id: Date.now(),
+      avisoId: avisoId,
       nombreArchivo: nombre,
       base64: base64,
       texto: null,
@@ -104,7 +113,7 @@ async function guardarCVEnDB(nombre, base64) {
       calificacion: null
     };
     const request = objectStore.add(nuevoCV);
-    request.onsuccess = () => resolve(request.result);
+    request.onsuccess = () => resolve();
     request.onerror = (event) => reject('Error al guardar el CV: ' + event.target.error);
   });
 }
