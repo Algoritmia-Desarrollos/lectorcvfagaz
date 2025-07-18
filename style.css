@@ -148,6 +148,22 @@ a:hover {
   line-height: 1.7;
   font-size: 16px;
 }
+.lista-condiciones {
+  list-style: none;
+  padding-left: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.lista-condiciones li {
+  background-color: #eef2ff;
+  color: #312e81;
+  padding: 8px 12px;
+  border-radius: 20px;
+  font-weight: 500;
+  font-size: 14px;
+}
+
 
 /* --- ESTILOS PARA CREAR AVISO --- */
 .form-container {

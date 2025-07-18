@@ -7,7 +7,7 @@ const modalCloseBtn = document.getElementById('modal-close');
 const panelTitle = document.getElementById('panel-title');
 const processingStatus = document.getElementById('processing-status');
 
-const OPENAI_API_KEY = "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"; // Reemplaza con tu clave
+const OPENAI_API_KEY = "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";
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 let archivosCache = [];
 let avisoActivo = null;
@@ -94,7 +94,6 @@ async function cargarYProcesarCandidatos(db, avisoId) {
 
 // --- LÓGICA DE IA ---
 async function calificarCVConIA(textoCV, aviso) {
-    // ... (La lógica de esta función es idéntica a la versión anterior, no necesita cambios)
     const contextoAviso = `
         Título del Puesto: ${aviso.titulo}
         Descripción: ${aviso.descripcion}
@@ -145,7 +144,7 @@ async function calificarCVConIA(textoCV, aviso) {
 
 
 // --- RENDERIZADO Y MODALES ---
-function renderizarTarjeta(cv, returnHtml = false) {
+function renderizarTarjeta(cv) {
     const nombreCandidato = cv.nombreCandidato || cv.nombreArchivo.replace(/\.pdf$/i, '');
     const calificacionMostrada = cv.calificacion !== null ? `<strong>${cv.calificacion} / 100</strong>` : '-';
     const notasClass = cv.notas ? 'has-notes' : '';
@@ -166,7 +165,6 @@ function renderizarTarjeta(cv, returnHtml = false) {
         </td>
     `;
 
-    // Lógica para reemplazar la fila si ya existe, o añadirla si es nueva
     const existingRow = resumenesList.querySelector(`tr[data-id='${cv.id}']`);
     if(existingRow) {
         existingRow.replaceWith(row);
@@ -175,9 +173,27 @@ function renderizarTarjeta(cv, returnHtml = false) {
     }
 }
 
-// ... (El resto de funciones de modales, DB y OCR son idénticas a la versión anterior)
-// ...
-// ... (El resto de funciones como abrirModal, cerrarModal, etc. son idénticas a la versión anterior y no necesitan cambios)
+resumenesList.addEventListener('click', (e) => {
+    const button = e.target.closest('.action-btn');
+    if (!button) return;
+    const card = e.target.closest('tr');
+    const cvId = parseInt(card.dataset.id);
+    const action = button.dataset.action;
+    const cv = archivosCache.find(c => c.id === cvId);
+    if (!cv) return;
+    switch (action) {
+        case 'ver-resumen':
+            abrirModalResumen(cv);
+            break;
+        case 'ver-contacto':
+            abrirModalContacto(cv);
+            break;
+        case 'ver-notas':
+            abrirModalNotas(cv);
+            break;
+    }
+});
+
 modalCloseBtn.addEventListener('click', cerrarModal);
 modalContainer.addEventListener('click', (e) => {
     if (e.target === modalContainer) {
@@ -202,18 +218,21 @@ function abrirModalResumen(cv) {
 }
 function abrirModalContacto(cv) {
     modalTitle.textContent = `Contacto de ${cv.nombreCandidato || 'Candidato'}`;
-    modalBody.innerHTML = `<ul><li><strong>Nombre:</strong> ${cv.nombreCandidato}</li><li><strong>Email:</strong> ${cv.email}</li><li><strong>Teléfono:</strong> ${cv.telefono}</li></ul>`;
+    modalBody.innerHTML = `<ul><li><strong>Nombre:</strong> ${cv.nombreCandidato || 'No extraído'}</li><li><strong>Email:</strong> ${cv.email || 'No extraído'}</li><li><strong>Teléfono:</strong> ${cv.telefono || 'No extraído'}</li></ul>`;
     abrirModal();
 }
-function abrirModalNotas(cv) {
+async function abrirModalNotas(cv) {
     modalTitle.textContent = `Notas sobre ${cv.nombreCandidato || 'Candidato'}`;
-    modalBody.innerHTML = `<textarea id="notas-textarea">${cv.notas || ''}</textarea><div class="modal-footer"><button id="guardar-notas-btn" class="action-btn download-btn">Guardar</button></div>`;
+    modalBody.innerHTML = `<textarea id="notas-textarea" placeholder="Escribe tus notas aquí...">${cv.notas || ''}</textarea><div class="modal-footer"><button id="guardar-notas-btn" class="action-btn primary-btn">Guardar</button></div>`;
+    
     document.getElementById('guardar-notas-btn').onclick = async () => {
-        cv.notas = document.getElementById('notas-textarea').value;
+        const nuevasNotas = document.getElementById('notas-textarea').value;
         const db = await abrirDB();
-        await actualizarCandidatoEnDB(db, cv);
+        const candidato = archivosCache.find(c => c.id === cv.id);
+        candidato.notas = nuevasNotas;
+        await actualizarCandidatoEnDB(db, candidato);
         cerrarModal();
-        renderizarTarjeta(cv); // Re-render to update notes button style
+        renderizarTarjeta(candidato); // Re-render to update notes button style
     };
     abrirModal();
 }
