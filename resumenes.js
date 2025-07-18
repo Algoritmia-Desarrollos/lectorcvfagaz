@@ -5,10 +5,9 @@ const modalTitle = document.getElementById('modal-title');
 const modalBody = document.getElementById('modal-body');
 const modalCloseBtn = document.getElementById('modal-close');
 const panelTitle = document.getElementById('panel-title');
-const cvListHeader = document.getElementById('cv-list-header');
 const processingStatus = document.getElementById('processing-status');
 
-const OPENAI_API_KEY = "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";
+const OPENAI_API_KEY = "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"; // Reemplaza con tu clave
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 let archivosCache = [];
 let avisoActivo = null;
@@ -35,7 +34,7 @@ window.addEventListener('DOMContentLoaded', async () => {
 
     if (!avisoId) {
         panelTitle.textContent = 'Error';
-        resumenesList.innerHTML = '<p>No se ha especificado una búsqueda laboral. Por favor, selecciona una desde la <a href="lista-avisos.html">lista de búsquedas</a>.</p>';
+        resumenesList.innerHTML = '<tr><td colspan="5">No se ha especificado una búsqueda. Selecciona una desde la <a href="lista-avisos.html">lista de búsquedas</a>.</td></tr>';
         return;
     }
 
@@ -43,13 +42,12 @@ window.addEventListener('DOMContentLoaded', async () => {
     const aviso = await getAvisoById(db, avisoId);
     if (!aviso) {
         panelTitle.textContent = 'Error';
-        resumenesList.innerHTML = '<p>La búsqueda laboral no fue encontrada.</p>';
+        resumenesList.innerHTML = '<tr><td colspan="5">La búsqueda laboral no fue encontrada.</td></tr>';
         return;
     }
     
     avisoActivo = aviso;
     panelTitle.textContent = `Candidatos para: ${aviso.titulo}`;
-    cvListHeader.classList.remove('hidden');
     
     await cargarYProcesarCandidatos(db, avisoId);
 });
@@ -67,7 +65,7 @@ async function cargarYProcesarCandidatos(db, avisoId) {
     const nuevosCandidatos = candidatos.filter(cv => cv.calificacion === null);
     processingStatus.textContent = nuevosCandidatos.length > 0 ? `Analizando ${nuevosCandidatos.length} nuevos CVs...` : "Todos los candidatos están calificados.";
     
-    resumenesList.innerHTML = ''; // Limpiar lista antes de renderizar
+    resumenesList.innerHTML = '';
     for (const cv of candidatos) {
         if (cv.calificacion === null) {
             try {
@@ -94,22 +92,19 @@ async function cargarYProcesarCandidatos(db, avisoId) {
     if (nuevosCandidatos.length > 0) processingStatus.textContent = "Análisis completado.";
 }
 
-
-// --- LÓGICA DE IA MEJORADA ---
+// --- LÓGICA DE IA ---
 async function calificarCVConIA(textoCV, aviso) {
+    // ... (La lógica de esta función es idéntica a la versión anterior, no necesita cambios)
     const contextoAviso = `
         Título del Puesto: ${aviso.titulo}
         Descripción: ${aviso.descripcion}
         Condiciones Necesarias (Excluyentes y Críticas): ${aviso.condicionesNecesarias.join(', ')}
         Condiciones Deseables (Suman puntos extra): ${aviso.condicionesDeseables.join(', ')}
     `;
-
     const prompt = `
         Eres un reclutador experto de RRHH. Tu tarea es analizar un CV en comparación con un aviso de trabajo específico. Debes ser estricto y objetivo.
-
         **TAREA:**
         Compara el "TEXTO DEL CV" con el "CONTEXTO DEL AVISO". Devuelve tu análisis únicamente en formato JSON con 5 claves: "nombreCompleto", "email", "telefono", "calificacion" y "justificacion".
-
         **REGLAS DE ANÁLISIS Y CALIFICACIÓN:**
         1.  **"nombreCompleto", "email", "telefono"**: Extrae los datos de contacto del candidato del CV.
         2.  **"calificacion"**: Asigna una nota numérica de 1 a 100.
@@ -117,18 +112,15 @@ async function calificarCVConIA(textoCV, aviso) {
             - Si cumple con todas las necesarias, parte de una base de 70 puntos.
             - Suma puntos por cada "Condición Deseable" que cumpla y por experiencia general relevante, hasta un máximo de 100.
         3.  **"justificacion"**: Redacta un párrafo justificando la nota. Empieza mencionando si cumple o no con los requisitos necesarios. Luego, detalla las fortalezas y debilidades del candidato en relación al puesto. Sé claro y directo.
-
         **CONTEXTO DEL AVISO:**
         """
         ${contextoAviso}
         """
-
         **TEXTO DEL CV:**
         """
         ${textoCV}
         """
     `;
-    
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
         method: "POST",
         headers: { "Authorization": `Bearer ${OPENAI_API_KEY}`, "Content-Type": "application/json" },
@@ -153,26 +145,38 @@ async function calificarCVConIA(textoCV, aviso) {
 
 
 // --- RENDERIZADO Y MODALES ---
-// (Estas funciones se mantienen sin cambios significativos en su lógica interna)
-function renderizarTarjeta(cv) {
+function renderizarTarjeta(cv, returnHtml = false) {
     const nombreCandidato = cv.nombreCandidato || cv.nombreArchivo.replace(/\.pdf$/i, '');
     const calificacionMostrada = cv.calificacion !== null ? `<strong>${cv.calificacion} / 100</strong>` : '-';
     const notasClass = cv.notas ? 'has-notes' : '';
-    const card = document.createElement('div');
-    card.className = 'cv-card';
-    card.dataset.id = cv.id;
-    card.innerHTML = `
-        <div class="candidate-name">${nombreCandidato}</div>
-        <div>${calificacionMostrada}</div>
-        <div><button class="action-btn" data-action="ver-resumen">Análisis IA</button></div>
-        <div><button class="action-btn ${notasClass}" data-action="ver-notas">Notas</button></div>
-        <div class="actions">
-            <a href="${cv.base64}" download="${nombreCandidato.replace(/ /g, '_')}.pdf" class="action-btn download-btn">Ver CV</a>
-            <button class="action-btn" data-action="ver-contacto">Contacto</button>
-        </div>
+
+    const row = document.createElement('tr');
+    row.dataset.id = cv.id;
+    
+    row.innerHTML = `
+        <td><strong>${nombreCandidato}</strong></td>
+        <td>${calificacionMostrada}</td>
+        <td><button class="action-btn" data-action="ver-resumen">Análisis IA</button></td>
+        <td><button class="action-btn ${notasClass}" data-action="ver-notas">Notas</button></td>
+        <td>
+            <div class="actions-group">
+                <a href="${cv.base64}" download="${nombreCandidato.replace(/ /g, '_')}.pdf" class="action-btn primary-btn">Ver CV</a>
+                <button class="action-btn" data-action="ver-contacto">Contacto</button>
+            </div>
+        </td>
     `;
-    resumenesList.appendChild(card);
+
+    // Lógica para reemplazar la fila si ya existe, o añadirla si es nueva
+    const existingRow = resumenesList.querySelector(`tr[data-id='${cv.id}']`);
+    if(existingRow) {
+        existingRow.replaceWith(row);
+    } else {
+        resumenesList.appendChild(row);
+    }
 }
+
+// ... (El resto de funciones de modales, DB y OCR son idénticas a la versión anterior)
+// ...
 // ... (El resto de funciones como abrirModal, cerrarModal, etc. son idénticas a la versión anterior y no necesitan cambios)
 modalCloseBtn.addEventListener('click', cerrarModal);
 modalContainer.addEventListener('click', (e) => {

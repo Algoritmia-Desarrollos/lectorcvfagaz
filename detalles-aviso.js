@@ -8,8 +8,8 @@ const necesariasList = document.getElementById('necesarias-list');
 const deseablesList = document.getElementById('deseables-list');
 const linkPostulanteInput = document.getElementById('link-postulante');
 const copiarLinkBtn = document.getElementById('copiar-link-btn');
+const abrirLinkBtn = document.getElementById('abrir-link-btn');
 const qrCanvas = document.getElementById('qr-canvas');
-const compartirBtn = document.getElementById('compartir-btn');
 
 // --- Base de datos ---
 const DB_NAME = 'RecruitmentDB';
@@ -56,18 +56,21 @@ window.addEventListener('DOMContentLoaded', async () => {
         avisoValidoHasta.textContent = new Date(aviso.validoHasta).toLocaleDateString('es-AR');
         avisoDescripcion.textContent = aviso.descripcion;
 
-        necesariasList.innerHTML = aviso.condicionesNecesarias.map(c => `<li>${c}</li>`).join('');
-        deseablesList.innerHTML = aviso.condicionesDeseables.map(c => `<li>${c}</li>`).join('');
+        necesariasList.innerHTML = aviso.condicionesNecesarias.map(c => `<li>${c}</li>`).join('') || '<li>No se especificaron condiciones necesarias.</li>';
+        deseablesList.innerHTML = aviso.condicionesDeseables.map(c => `<li>${c}</li>`).join('') || '<li>No se especificaron condiciones deseables.</li>';
 
-        const link = `${window.location.origin}/index.html?avisoId=${aviso.id}`;
+        const path = window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/'));
+        const link = `${window.location.origin}${path}/index.html?avisoId=${aviso.id}`;
+        
         linkPostulanteInput.value = link;
+        abrirLinkBtn.href = link;
 
         new QRious({
             element: qrCanvas,
             value: link,
             size: 150,
             background: 'white',
-            foreground: '#1e293b'
+            foreground: '#334155'
         });
     } else {
         avisoTitulo.textContent = 'Aviso no encontrado';
@@ -79,17 +82,4 @@ copiarLinkBtn.addEventListener('click', () => {
     document.execCommand('copy');
     copiarLinkBtn.textContent = '¡Copiado!';
     setTimeout(() => { copiarLinkBtn.textContent = 'Copiar'; }, 2000);
-});
-
-compartirBtn.addEventListener('click', async () => {
-    const shareData = {
-        title: `Postulate para: ${avisoTitulo.textContent}`,
-        text: 'Encontramos esta búsqueda laboral que podría interesarte.',
-        url: linkPostulanteInput.value
-    };
-    try {
-        await navigator.share(shareData);
-    } catch (err) {
-        console.error("Error al compartir:", err);
-    }
 });

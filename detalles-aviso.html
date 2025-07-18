@@ -8,44 +8,40 @@
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
-<body class="dark-theme">
-  <div class="panel-container">
-    <div class="form-header">
+<body>
+  <div class="details-container">
+    <div class="details-header">
       <h1 id="aviso-titulo">Cargando detalles del aviso...</h1>
-      <a href="lista-avisos.html" class="action-btn">Volver a mis avisos</a>
+      <a href="lista-avisos.html" class="action-btn">Volver a Mis Avisos</a>
     </div>
 
-    <div class="details-grid">
-        <div class="details-main">
-            <div class="details-section">
-                <h3>Información General</h3>
-                <p><strong>ID de Evaluación:</strong> <span id="aviso-id"></span></p>
-                <p><strong>Máxima cantidad de CV:</strong> <span id="aviso-max-cv"></span></p>
-                <p><strong>Válido hasta:</strong> <span id="aviso-valido-hasta"></span></p>
-            </div>
-            <div class="details-section">
-                <h3>Descripción del puesto:</h3>
-                <p id="aviso-descripcion"></p>
-            </div>
-             <div class="details-section">
-                <h3>Condiciones Necesarias</h3>
-                <ul id="necesarias-list" class="lista-condiciones"></ul>
-            </div>
-             <div class="details-section">
-                <h3>Condiciones Deseables</h3>
-                <ul id="deseables-list" class="lista-condiciones"></ul>
-            </div>
-        </div>
-
-        <div class="details-sidebar">
-            <div class="details-section share-section">
-                <h3>Link para postulantes</h3>
-                <input type="text" id="link-postulante" readonly>
-                <button id="copiar-link-btn" class="action-btn download-btn">Copiar</button>
-                <div class="qr-code">
-                    <canvas id="qr-canvas"></canvas>
+    <div class="details-body">
+        <div class="details-grid">
+            <div class="details-main">
+                <div class="details-section">
+                    <h3>Información General</h3>
+                    <p><strong>ID de Evaluación:</strong> <span id="aviso-id"></span></p>
+                    <p><strong>Máxima cantidad de CV:</strong> <span id="aviso-max-cv"></span></p>
+                    <p><strong>Válido hasta:</strong> <span id="aviso-valido-hasta"></span></p>
                 </div>
-                <button id="compartir-btn" class="action-btn">Compartir este aviso</button>
+                <div class="details-section">
+                    <h3>Descripción del puesto:</h3>
+                    <p id="aviso-descripcion"></p>
+                </div>
+            </div>
+
+            <div class="details-sidebar">
+                <div class="details-section share-section">
+                    <h3>Link para Postulantes</h3>
+                    <div class="qr-code">
+                        <canvas id="qr-canvas"></canvas>
+                    </div>
+                    <input type="text" id="link-postulante" readonly>
+                    <div class="link-group">
+                        <button id="copiar-link-btn" class="action-btn">Copiar</button>
+                        <a id="abrir-link-btn" href="#" target="_blank" class="action-btn primary-btn">Abrir</a>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
