@@ -1,4 +1,7 @@
-// --- SELECTORES ---
+// 1. Importamos el cliente de Supabase para poder usarlo.
+import { supabase } from './supabaseClient.js';
+
+// --- SELECTORES (Sin cambios) ---
 const avisoTitulo = document.getElementById('aviso-titulo');
 const avisoIdSpan = document.getElementById('aviso-id');
 const avisoMaxCv = document.getElementById('aviso-max-cv');
@@ -11,73 +14,75 @@ const copiarLinkBtn = document.getElementById('copiar-link-btn');
 const abrirLinkBtn = document.getElementById('abrir-link-btn');
 const qrCanvas = document.getElementById('qr-canvas');
 
+// 2. ELIMINAMOS EL CÓDIGO ANTIGUO DE INDEXEDDB
+/*
 // --- Base de datos ---
 const DB_NAME = 'RecruitmentDB';
 function abrirDB() {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, 1);
-    request.onerror = () => reject("Error");
-    request.onupgradeneeded = (event) => {
-      const db = event.target.result;
-      if (!db.objectStoreNames.contains('avisos')) db.createObjectStore('avisos', { keyPath: 'id' });
-      if (!db.objectStoreNames.contains('candidatos')) db.createObjectStore('candidatos', { keyPath: 'id' }).createIndex('avisoId', 'avisoId');
-    };
-    request.onsuccess = (event) => resolve(event.target.result);
-  });
+  // ...código eliminado...
 }
 
 async function getAvisoById(id) {
-    const db = await abrirDB();
-    return new Promise((resolve, reject) => {
-        const transaction = db.transaction(['avisos'], 'readonly');
-        const store = transaction.objectStore('avisos');
-        const request = store.get(id);
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = e => reject(e.target.error);
-    });
+    // ...código eliminado...
 }
+*/
 
 // --- Lógica Principal ---
 window.addEventListener('DOMContentLoaded', async () => {
+    // Obtiene el ID del aviso desde la URL (ej: ?id=123)
     const urlParams = new URLSearchParams(window.location.search);
     const id = parseInt(urlParams.get('id'), 10);
 
+    // Si no hay un ID en la URL, muestra un error.
     if (!id) {
         avisoTitulo.textContent = 'Aviso no encontrado';
         return;
     }
 
-    const aviso = await getAvisoById(id);
+    // 3. BUSCAMOS EL AVISO EN SUPABASE
+    const { data: aviso, error } = await supabase
+        .from('avisos')      // De la tabla 'avisos'
+        .select('*')         // Seleccionamos todas las columnas
+        .eq('id', id)        // Donde el 'id' sea igual al de la URL
+        .single();           // Esperamos un único resultado
 
-    if (aviso) {
-        // CORRECCIÓN: Usar snake_case para coincidir con la base de datos
-        avisoTitulo.textContent = aviso.titulo;
-        avisoIdSpan.textContent = aviso.id;
-        avisoMaxCv.textContent = aviso.max_cv;
-        avisoValidoHasta.textContent = new Date(aviso.valido_hasta).toLocaleDateString('es-AR');
-        avisoDescripcion.textContent = aviso.descripcion;
-
-        necesariasList.innerHTML = aviso.condiciones_necesarias.map(c => `<li>${c}</li>`).join('') || '<li>No se especificaron condiciones necesarias.</li>';
-        deseablesList.innerHTML = aviso.condiciones_deseables.map(c => `<li>${c}</li>`).join('') || '<li>No se especificaron condiciones deseables.</li>';
-
-        const path = window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/'));
-        const link = `${window.location.origin}${path}/index.html?avisoId=${aviso.id}`;
-        
-        linkPostulanteInput.value = link;
-        abrirLinkBtn.href = link;
-
-        new QRious({
-            element: qrCanvas,
-            value: link,
-            size: 150,
-            background: 'white',
-            foreground: '#334155'
-        });
-    } else {
+    // Si hubo un error o no se encontró el aviso, lo mostramos.
+    if (error || !aviso) {
+        console.error("Error al buscar el aviso:", error);
         avisoTitulo.textContent = 'Aviso no encontrado';
+        return;
     }
+    
+    // Si se encontró el aviso, rellenamos la página con sus datos.
+    avisoTitulo.textContent = aviso.titulo;
+    avisoIdSpan.textContent = aviso.id;
+    avisoMaxCv.textContent = aviso.max_cv;
+    avisoDescripcion.textContent = aviso.descripcion;
+    
+    // Formateamos la fecha para mostrarla correctamente.
+    avisoValidoHasta.textContent = new Date(aviso.valido_hasta).toLocaleDateString('es-AR', { timeZone: 'UTC' });
+
+    // Mostramos las listas de condiciones.
+    necesariasList.innerHTML = aviso.condiciones_necesarias.map(c => `<li>${c}</li>`).join('') || '<li>No se especificaron condiciones.</li>';
+    deseablesList.innerHTML = aviso.condiciones_deseables.map(c => `<li>${c}</li>`).join('') || '<li>No se especificaron condiciones.</li>';
+
+    // Generamos el link de postulación y el código QR.
+    const path = window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/'));
+    const link = `${window.location.origin}${path}/index.html?avisoId=${aviso.id}`;
+    
+    linkPostulanteInput.value = link;
+    abrirLinkBtn.href = link;
+
+    new QRious({
+        element: qrCanvas,
+        value: link,
+        size: 150,
+        background: 'white',
+        foreground: '#334155'
+    });
 });
 
+// Lógica para el botón de copiar (sin cambios)
 copiarLinkBtn.addEventListener('click', () => {
     linkPostulanteInput.select();
     document.execCommand('copy');

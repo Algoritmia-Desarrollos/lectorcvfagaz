@@ -84,7 +84,7 @@ async function pedirResumenConGPT(textoExtraido) {
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
-      model: "gpt-3_5-turbo-0125",
+      model: "gpt-3.5-turbo",
       messages: [
         {
           role: "user",

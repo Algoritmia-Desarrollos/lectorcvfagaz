@@ -1,3 +1,7 @@
+// Se importa el cliente de Supabase.
+import { supabase } from './supabaseClient.js';
+
+// --- SELECTORES (Sin cambios) ---
 const fileInput = document.getElementById('fileInput');
 const cvForm = document.getElementById('cv-form');
 const submitBtn = document.getElementById('submit-btn');
@@ -9,22 +13,7 @@ const uploadSection = document.getElementById('upload-section');
 
 let avisoActivo = null;
 
-// --- Base de datos ---
-const DB_NAME = 'RecruitmentDB';
-function abrirDB() {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, 1);
-    request.onerror = () => reject("Error");
-    request.onupgradeneeded = (event) => {
-      const db = event.target.result;
-      if (!db.objectStoreNames.contains('avisos')) db.createObjectStore('avisos', { keyPath: 'id' });
-      if (!db.objectStoreNames.contains('candidatos')) db.createObjectStore('candidatos', { keyPath: 'id' }).createIndex('avisoId', 'avisoId');
-    };
-    request.onsuccess = (event) => resolve(event.target.result);
-  });
-}
-
-// --- Lógica para mostrar el aviso ---
+// --- Lógica para mostrar el aviso (Sin cambios) ---
 window.addEventListener('DOMContentLoaded', async () => {
     const urlParams = new URLSearchParams(window.location.search);
     const avisoId = parseInt(urlParams.get('avisoId'), 10);
@@ -35,33 +24,33 @@ window.addEventListener('DOMContentLoaded', async () => {
         return;
     }
     
-    const db = await abrirDB();
-    const transaction = db.transaction(['avisos'], 'readonly');
-    const store = transaction.objectStore('avisos');
-    const request = store.get(avisoId);
+    const { data: aviso, error } = await supabase
+        .from('avisos')
+        .select('*')
+        .eq('id', avisoId)
+        .single();
 
-    request.onsuccess = () => {
-        avisoActivo = request.result;
-        if (avisoActivo) {
-            // CORRECCIÓN: Usar snake_case para coincidir con la base de datos
-            avisoContainer.innerHTML = `
-                <div class="aviso-header">
-                    <h1>${avisoActivo.titulo}</h1>
-                    <div class="aviso-meta">
-                        <span><strong>Cierre:</strong> ${new Date(avisoActivo.valido_hasta).toLocaleDateString('es-AR')}</span>
-                        <span><strong>Cupo:</strong> ${avisoActivo.max_cv}</span>
-                    </div>
-                </div>
-                <p class="descripcion">${avisoActivo.descripcion.replace(/\n/g, '<br>')}</p>
-            `;
-        } else {
-            avisoContainer.innerHTML = '<h1>Esta búsqueda laboral no fue encontrada.</h1>';
-            uploadSection.classList.add('hidden');
-        }
-    };
+    if (error || !aviso) {
+        console.error("Error al buscar el aviso:", error);
+        avisoContainer.innerHTML = '<h1>Esta búsqueda laboral no fue encontrada.</h1>';
+        uploadSection.classList.add('hidden');
+        return;
+    }
+    
+    avisoActivo = aviso;
+    avisoContainer.innerHTML = `
+        <div class="aviso-header">
+            <h1>${avisoActivo.titulo}</h1>
+            <div class="aviso-meta">
+                <span><strong>Cierre:</strong> ${new Date(avisoActivo.valido_hasta).toLocaleDateString('es-AR', { timeZone: 'UTC' })}</span>
+                <span><strong>Cupo:</strong> ${avisoActivo.max_cv}</span>
+            </div>
+        </div>
+        <p class="descripcion">${avisoActivo.descripcion.replace(/\n/g, '<br>')}</p>
+    `;
 });
 
-// --- Lógica de subida de archivo ---
+// --- Lógica de subida de archivo (Sin cambios) ---
 let selectedFile = null;
 fileInput.addEventListener('change', (e) => {
   selectedFile = e.target.files[0];
@@ -75,46 +64,51 @@ fileInput.addEventListener('change', (e) => {
   }
 });
 
+// --- Lógica de envío del formulario (Sin cambios) ---
 cvForm.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  if (!selectedFile || !avisoActivo) return;
-  submitBtn.disabled = true;
-  submitBtn.textContent = 'Enviando...';
-  const reader = new FileReader();
-  reader.onload = async function () {
-    const base64 = reader.result;
-    try {
-      await guardarCVEnDB(selectedFile.name, base64, avisoActivo.id);
-      formView.classList.add('hidden');
-      successView.classList.remove('hidden');
-    } catch (error) {
-      console.error("Error al guardar en IndexedDB:", error);
-      submitBtn.textContent = 'Error al guardar';
-    }
-  };
-  reader.readAsDataURL(selectedFile);
+    e.preventDefault();
+    if (!selectedFile || !avisoActivo) return;
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Enviando...';
+
+    const reader = new FileReader();
+    reader.onload = async function () {
+        const base64 = reader.result;
+        try {
+            await guardarCVEnSupabase(selectedFile.name, base64, avisoActivo.id);
+            formView.classList.add('hidden');
+            successView.classList.remove('hidden');
+        } catch (error) {
+            console.error("Error al guardar en Supabase:", error);
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Error al Enviar';
+            alert(`Hubo un problema al enviar tu postulación: ${error.message}`);
+        }
+    };
+    reader.readAsDataURL(selectedFile);
 });
 
-async function guardarCVEnDB(nombre, base64, avisoId) {
-  const db = await abrirDB();
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction(['candidatos'], 'readwrite');
-    const objectStore = transaction.objectStore('candidatos');
-    const nuevoCV = {
-      id: Date.now(),
-      avisoId: avisoId,
-      nombreArchivo: nombre,
+/**
+ * Esta función prepara el objeto del candidato y lo inserta en Supabase.
+ * Nota cómo NO se incluye un campo "id", ya que la base de datos
+ * (una vez configurada con "Is Identity") se encargará de generarlo.
+ */
+async function guardarCVEnSupabase(nombre, base64, avisoId) {
+    const nuevoCandidato = {
+      aviso_id: avisoId,
+      nombre_archivo: nombre,
       base64: base64,
-      texto: null,
-      resumen: null,
-      nombreCandidato: null,
-      email: null,
-      telefono: null,
-      notas: '',
-      calificacion: null
+      // El resto de los campos (resumen, calificación, etc.) se dejan nulos
+      // para que el proceso de IA los llene después.
     };
-    const request = objectStore.add(nuevoCV);
-    request.onsuccess = () => resolve();
-    request.onerror = (event) => reject('Error al guardar el CV: ' + event.target.error);
-  });
+
+    // Aquí es donde se intenta insertar en la base de datos.
+    // Si la columna 'id' no es autoincremental, esta línea falla.
+    const { error } = await supabase.from('candidatos').insert(nuevoCandidato);
+
+    if (error) {
+        // Si Supabase devuelve un error, se lanza para que el bloque .catch() lo muestre.
+        throw new Error(error.message);
+    }
 }

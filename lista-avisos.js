@@ -1,66 +1,64 @@
+// Se importa el cliente de Supabase para poder interactuar con la base de datos.
+import { supabase } from './supabaseClient.js';
+
+// Se obtiene la referencia al cuerpo de la tabla donde se mostrarán los avisos.
 const avisoListBody = document.getElementById('aviso-list-body');
 
-// --- Base de datos ---
-const DB_NAME = 'RecruitmentDB';
-function abrirDB() {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, 1);
-    request.onerror = () => reject("Error al abrir IndexedDB");
-    request.onupgradeneeded = (event) => {
-      const db = event.target.result;
-      if (!db.objectStoreNames.contains('avisos')) {
-        db.createObjectStore('avisos', { keyPath: 'id' });
-      }
-      if (!db.objectStoreNames.contains('candidatos')) {
-        const candidatosStore = db.createObjectStore('candidatos', { keyPath: 'id' });
-        candidatosStore.createIndex('avisoId', 'avisoId', { unique: false });
-      }
-    };
-    request.onsuccess = (event) => resolve(event.target.result);
-  });
-}
-
-async function obtenerTodosLosDatos() {
-    const db = await abrirDB();
-    return new Promise((resolve) => {
-        const transaction = db.transaction(['avisos', 'candidatos'], 'readonly');
-        const avisosStore = transaction.objectStore('avisos');
-        const candidatosStore = transaction.objectStore('candidatos');
-        
-        const avisosRequest = avisosStore.getAll();
-        const candidatosRequest = candidatosStore.getAll();
-
-        let avisos, candidatos;
-
-        avisosRequest.onsuccess = () => {
-            avisos = avisosRequest.result;
-            if (candidatos !== undefined) resolve({ avisos, candidatos });
-        };
-        candidatosRequest.onsuccess = () => {
-            candidatos = candidatosRequest.result;
-            if (avisos !== undefined) resolve({ avisos, candidatos });
-        };
-    });
-}
-
-// --- Lógica principal ---
+/**
+ * Esta es la función principal que se ejecuta cuando el contenido de la página se ha cargado.
+ * Se conecta a Supabase para obtener los datos y construir la tabla de avisos.
+ */
 window.addEventListener('DOMContentLoaded', async () => {
-    const { avisos, candidatos } = await obtenerTodosLosDatos();
+    // Muestra un mensaje de carga mientras se obtienen los datos.
+    avisoListBody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 20px;">Cargando búsquedas laborales...</td></tr>';
 
+    // 1. Obtiene todos los registros de la tabla 'avisos' en Supabase.
+    //    Los ordena por fecha de creación para mostrar los más nuevos primero.
+    const { data: avisos, error: errorAvisos } = await supabase
+        .from('avisos')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+    // Si ocurre un error al obtener los avisos, lo muestra en la consola y en la tabla.
+    if (errorAvisos) {
+        console.error("Error al cargar los avisos:", errorAvisos);
+        avisoListBody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: red;">Error al cargar los avisos. Revisa la consola para más detalles.</td></tr>`;
+        return;
+    }
+    
+    // 2. Obtiene la columna 'aviso_id' de todos los candidatos.
+    //    Esto es necesario para contar cuántas postulaciones tiene cada aviso.
+    const { data: candidatos, error: errorCandidatos } = await supabase
+        .from('candidatos')
+        .select('aviso_id');
+        
+    // Si hay un error al obtener los candidatos, solo se muestra en la consola, pero la página sigue funcionando.
+    if (errorCandidatos) {
+        console.error("Error al cargar el conteo de candidatos:", errorCandidatos);
+    }
+
+    // Si no hay avisos en la base de datos, muestra un mensaje informativo.
     if (avisos.length === 0) {
         avisoListBody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 20px;">Aún no has creado ninguna búsqueda laboral.</td></tr>';
         return;
     }
 
-    avisos.sort((a, b) => b.id - a.id);
+    // Limpia la tabla (quita el mensaje de "Cargando...") antes de agregar las filas con los datos.
+    avisoListBody.innerHTML = '';
 
+    // 3. Recorre cada aviso obtenido para crear una fila en la tabla.
     avisos.forEach(aviso => {
-        const postulacionesCount = candidatos.filter(c => c.avisoId === aviso.id).length;
+        // Cuenta cuántos candidatos corresponden al ID del aviso actual.
+        const postulacionesCount = candidatos ? candidatos.filter(c => c.aviso_id === aviso.id).length : 0;
         
-        // CORRECCIÓN: Usar snake_case para coincidir con la base de datos
-        const validoHasta = new Date(aviso.valido_hasta).toLocaleDateString('es-AR');
+        // Formatea la fecha para que se muestre en un formato legible (DD/MM/AAAA).
+        // Se añade 'timeZone: UTC' para evitar problemas de desfasaje de un día.
+        const validoHasta = new Date(aviso.valido_hasta).toLocaleDateString('es-AR', { timeZone: 'UTC' });
 
+        // Crea un nuevo elemento <tr> (fila de tabla).
         const row = document.createElement('tr');
+        
+        // Define el contenido HTML de la fila con los datos del aviso.
         row.innerHTML = `
             <td>${aviso.id}</td>
             <td><strong>${aviso.titulo}</strong></td>
@@ -68,11 +66,13 @@ window.addEventListener('DOMContentLoaded', async () => {
             <td>${validoHasta}</td>
             <td>
                 <div class="actions-group">
-                    <a href="resumenes.html?avisoId=${aviso.id}">Ver Postulantes</a>
-                    <a href="detalles-aviso.html?id=${aviso.id}">Detalles</a>
+                    <a href="resumenes.html?avisoId=${aviso.id}" class="action-btn">Ver Postulantes</a>
+                    <a href="detalles-aviso.html?id=${aviso.id}" class="action-btn">Detalles</a>
                 </div>
             </td>
         `;
+        
+        // Añade la fila recién creada al cuerpo de la tabla.
         avisoListBody.appendChild(row);
     });
 });
