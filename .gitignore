@@ -1,0 +1,7 @@
+# Archivos de entorno y configuración que contienen secretos
+.env
+config.js
+
+# Otros archivos comunes a ignorar (opcional, pero buena práctica)
+node_modules/
+.DS_Store

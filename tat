@@ -1,0 +1,17 @@
+[33mcommit 39a83b8e6676fc3241f256264b91e8981a9b1b50[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m
+Author: lucagazze <lucagazze1@gmail.com>
+Date:   Fri Jul 18 14:56:50 2025 -0300
+
+    2
+
+[33mcommit 5a31c786395053a8c087bfb4ef6523ad8478c6e9[m
+Author: lucagazze <lucagazze1@gmail.com>
+Date:   Fri Jul 18 14:55:07 2025 -0300
+
+    2
+
+[33mcommit fa24a8af3711674c40399c639855aa76ad53e3f4[m[33m ([m[1;31morigin/main[m[33m)[m
+Author: lucagazze <lucagazze1@gmail.com>
+Date:   Fri Jul 18 14:51:15 2025 -0300
+
+    fix: removed OpenAI API key from code

@@ -1,5 +1,8 @@
 // Se importa el cliente de Supabase.
 import { supabase } from './supabaseClient.js';
+// ✨ CORRECCIÓN: Se importa la clave de API desde tu archivo de configuración.
+import { OPENAI_API_KEY } from './config.js';
+
 
 // --- SELECTORES Y CONSTANTES GLOBALES ---
 const resumenesList = document.getElementById('resumenes-list');
@@ -12,8 +15,6 @@ const processingStatus = document.getElementById('processing-status');
 const filtroContainer = document.getElementById('filtro-container');
 const filtroNombre = document.getElementById('filtro-nombre');
 
-// ❗ IMPORTANTE: Asegúrate de que esta clave de API sea correcta y esté segura.
-const OPENAI_API_KEY = "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";
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 let archivosCache = [];
 let avisoActivo = null;
@@ -63,6 +64,7 @@ async function cargarYProcesarCandidatos(avisoId) {
             processingStatus.textContent = `Procesando ${index + 1} de ${nuevosCandidatos.length}... (${cv.nombre_archivo})`;
             try {
                 const textoCV = await extraerTextoOCR(cv.base64);
+                // Aquí se llama a la función con el prompt mejorado.
                 const iaData = await calificarCVConIA(textoCV, avisoActivo);
                 
                 const datosActualizados = {
@@ -113,7 +115,7 @@ async function actualizarCandidatoEnDB(candidatoId, datos) {
 }
 
 // =================================================================================
-// ✨ NUEVA FUNCIÓN calificarCVConIA CON PROMPT AVANZADO ✨
+// ✨ NUEVA FUNCIÓN calificarCVConIA CON PROMPT DE RECLUTADOR EXPERTO ✨
 // =================================================================================
 async function calificarCVConIA(textoCV, aviso) {
     const textoCVOptimizado = textoCV.substring(0, 4000);
@@ -153,11 +155,11 @@ No uses notas fijas. Aplica tu criterio dentro de estos rangos:
     - Comienza con tu veredicto sobre la **relevancia del perfil**.
     - Luego, detalla el cumplimiento (o incumplimiento) de las **condiciones excluyentes y deseables** clave.
     - Concluye con una síntesis que justifique la calificación otorgada y una recomendación final.
-    - **Ejemplo (Mecánico para Limpieza):** "El perfil del candidato está enfocado en mecánica automotriz, lo que lo hace fundamentalmente no relevante para la posición de Limpieza de Silos, que requiere experiencia en tareas operativas de limpieza industrial. Por esta falta de alineación central, la calificación es baja (ej. 18/100) a pesar de tener carnet de conducir. No se recomienda avanzar con este perfil."
+    - **Ejemplo (Mecánico para Limpieza):** "La calificación es baja (ej. 18/100) porque el perfil del candidato, enfocado en mecánica automotriz, es fundamentalmente no relevante para la posición de Limpieza de Silos. Aunque menciona habilidades generales, carece de la experiencia específica requerida, por lo que no se considera un perfil adecuado."
     - **Ejemplo (Perfil Bueno):** "Este candidato presenta una experiencia relevante en logística, cumpliendo con los requisitos excluyentes de manejo de inventario y sistema de gestión. Aunque no posee conocimientos en el software deseable 'SAP', su sólida trayectoria justifica una buena calificación (ej. 78/100). Se recomienda una entrevista para validar su capacidad de adaptación."
 
 **Formato de Salida (JSON estricto):**
-Devuelve un objeto JSON con 5 claves: "nombreCompleto", "email", "telefono", "calificacion" (número) y "justificacion" (el string de texto).
+Devuelve un objeto JSON con 5 claves: "nombreCompleto", "email", "telefono", "calificacion" (número entero) y "justificacion" (el string de texto).
 `;
     
     const response = await fetchWithTimeout("https://api.openai.com/v1/chat/completions", {
@@ -167,7 +169,7 @@ Devuelve un objeto JSON con 5 claves: "nombreCompleto", "email", "telefono", "ca
             model: "gpt-3.5-turbo",
             response_format: { "type": "json_object" },
             messages: [{ role: "user", content: prompt }],
-            temperature: 0.1, // Temperatura baja para que sea muy preciso y siga las reglas
+            temperature: 0.2, // Temperatura baja para que sea preciso y siga las reglas
         })
     });
 
